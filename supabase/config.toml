@@ -1,0 +1,9 @@
+# El project_ref real NO se versiona en este archivo.
+# Se vincula el proyecto remoto una única vez por máquina con:
+#   npx supabase link --project-ref <ref>
+# Ese comando guarda la referencia de forma local (archivos no commiteados),
+# así que acá sólo va el identificador lógico del proyecto.
+project_id = "organizador-gastos"
+
+[db]
+major_version = 15

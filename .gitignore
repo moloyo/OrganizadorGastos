@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-test
+dist-ssr
+test-results
+playwright-report
+*.local
+.env
+.env.local
+.DS_Store
+*.tsbuildinfo
+dev-dist
+
+.vercel
+supabase/.temp/
+.supabase/
