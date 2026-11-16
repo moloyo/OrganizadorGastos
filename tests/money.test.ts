@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Expense } from '../src/types'
 import {
-  compareCategories, formatCents, parseAmountToCents, sumCents, totalsByCategory,
+  compareCategories, formatCents, monthlyTotals, parseAmountToCents, sumCents, totalsByCategory,
 } from '../src/lib/money'
 
 function expense(category: string, amountCents: number): Expense {
@@ -57,6 +57,18 @@ describe('totales', () => {
   it('suma todos los gastos', () => {
     expect(sumCents([expense('A', 100), expense('B', 250)])).toBe(350)
     expect(sumCents([])).toBe(0)
+  })
+
+  it('calcula totales de los últimos meses incluyendo los vacíos', () => {
+    const expenses = [
+      expense('A', 1000),
+      { ...expense('B', 500), spentOn: '2026-09-10' },
+    ]
+    expect(monthlyTotals(expenses, '2026-11', 3)).toEqual([
+      { month: '2026-09', cents: 500 },
+      { month: '2026-10', cents: 0 },
+      { month: '2026-11', cents: 1000 },
+    ])
   })
 
   it('compara rubros con el mes anterior y calcula su peso', () => {

@@ -4,6 +4,8 @@ import type {
   OfflineStatus,
   SessionUser,
   Snapshot,
+  Transfer,
+  Trip,
 } from '../../types'
 
 /**
@@ -32,8 +34,13 @@ const QUEUE_PREFIX = 'gastos:queue:v1'
 
 type QueueOp =
   | { type: 'saveExpense'; expense: Expense }
+  | { type: 'saveExpenses'; expenses: Expense[] }
   | { type: 'deleteExpense'; id: string }
   | { type: 'clearExpenses' }
+  | { type: 'addTransfer'; transfer: Transfer }
+  | { type: 'deleteTransfer'; id: string }
+  | { type: 'createTrip'; trip: Trip }
+  | { type: 'deleteTrip'; id: string }
 
 const NETWORK_HINTS = [
   'failed to fetch', 'networkerror', 'network error', 'load failed', 'fetch failed',
@@ -201,6 +208,21 @@ export function createOfflineAdapter(
         return
       case 'clearExpenses':
         await base.clearExpenses()
+        return
+      case 'saveExpenses':
+        await base.saveExpenses(op.expenses)
+        return
+      case 'addTransfer':
+        await base.addTransfer(op.transfer)
+        return
+      case 'deleteTransfer':
+        await base.deleteTransfer(op.id)
+        return
+      case 'createTrip':
+        await base.createTrip(op.trip)
+        return
+      case 'deleteTrip':
+        await base.deleteTrip(op.id)
         return
     }
   }
@@ -384,6 +406,27 @@ export function createOfflineAdapter(
       }
     },
 
+    async saveExpenses(expenses) {
+      if (expenses.length === 0) return
+      const uid = await ensureScope()
+      if (uid) for (const expense of expenses) cacheUpsert(uid, expense)
+      if (!isOnline()) {
+        if (!uid) throw new Error('Tu sesión expiró. Volvé a ingresar.')
+        enqueue(uid, { type: 'saveExpenses', expenses })
+        return
+      }
+      try {
+        await base.saveExpenses(expenses)
+      } catch (error) {
+        if (uid && isOfflineError(error, isOnline())) {
+          enqueue(uid, { type: 'saveExpenses', expenses })
+          return
+        }
+        if (uid) cacheClearScope(uid)
+        throw error
+      }
+    },
+
     async deleteExpense(id) {
       const uid = await ensureScope()
       if (uid) cacheRemove(uid, id)
@@ -421,6 +464,46 @@ export function createOfflineAdapter(
         }
         if (uid) cacheClearScope(uid)
         throw error
+      }
+    },
+
+    async listTransfers() {
+      return base.listTransfers()
+    },
+    async addTransfer(transfer) {
+      try { await base.addTransfer(transfer) }
+      catch (error) {
+        const uid = await ensureScope()
+        if (uid && isOfflineError(error, isOnline())) enqueue(uid, { type: 'addTransfer', transfer })
+        else throw error
+      }
+    },
+    async deleteTransfer(id) {
+      try { await base.deleteTransfer(id) }
+      catch (error) {
+        const uid = await ensureScope()
+        if (uid && isOfflineError(error, isOnline())) enqueue(uid, { type: 'deleteTransfer', id })
+        else throw error
+      }
+    },
+
+    async listTrips() {
+      return base.listTrips()
+    },
+    async createTrip(trip) {
+      try { await base.createTrip(trip) }
+      catch (error) {
+        const uid = await ensureScope()
+        if (uid && isOfflineError(error, isOnline())) enqueue(uid, { type: 'createTrip', trip })
+        else throw error
+      }
+    },
+    async deleteTrip(id) {
+      try { await base.deleteTrip(id) }
+      catch (error) {
+        const uid = await ensureScope()
+        if (uid && isOfflineError(error, isOnline())) enqueue(uid, { type: 'deleteTrip', id })
+        else throw error
       }
     },
 

@@ -19,6 +19,13 @@ export interface Settlement {
   cents: number
 }
 
+export interface SharedTransfer {
+  from: string
+  to: string
+  baseAmountCents: number
+  paidOn: string
+}
+
 export interface MonthSummary {
   month: string
   totalCents: number
@@ -189,6 +196,7 @@ export function settle(balances: Record<string, number>): Settlement[] {
 export function computeBalances(
   expenses: SharedExpense[],
   memberIds: string[] = [],
+  transfers: SharedTransfer[] = [],
 ): { paidCents: Record<string, number>; owedCents: Record<string, number>; balances: Record<string, number> } {
   const paidCents: Record<string, number> = {}
   const owedCents: Record<string, number> = {}
@@ -207,6 +215,10 @@ export function computeBalances(
   const balances: Record<string, number> = {}
   for (const id of ids) {
     balances[id] = (paidCents[id] ?? 0) - (owedCents[id] ?? 0)
+  }
+  for (const transfer of transfers) {
+    balances[transfer.from] = (balances[transfer.from] ?? 0) + transfer.baseAmountCents
+    balances[transfer.to] = (balances[transfer.to] ?? 0) - transfer.baseAmountCents
   }
   return { paidCents, owedCents, balances }
 }
@@ -243,9 +255,11 @@ export function monthSummary(
   expenses: SharedExpense[],
   month: string,
   memberIds: string[] = [],
+  transfers: SharedTransfer[] = [],
 ): MonthSummary {
   const inMonth = expenses.filter((expense) => monthOf(expense.spentOn) === month)
-  const { paidCents, owedCents, balances } = computeBalances(inMonth, memberIds)
+  const transfersInMonth = transfers.filter((transfer) => monthOf(transfer.paidOn) === month)
+  const { paidCents, owedCents, balances } = computeBalances(inMonth, memberIds, transfersInMonth)
   return {
     month,
     totalCents: inMonth.reduce((total, expense) => total + expense.baseAmountCents, 0),

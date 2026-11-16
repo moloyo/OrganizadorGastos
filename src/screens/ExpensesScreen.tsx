@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import type { CurrencyCode, Expense } from '../types'
+import type { CurrencyCode, Expense, Recurrence } from '../types'
 import {
-  ChevronLeft, ChevronRight, Plus, Trash2, Wallet,
+  ChevronLeft, ChevronRight, Plus, Search, Trash2, Wallet,
 } from 'lucide-react'
 import { useApp } from '../state/AppContext'
 import { ScreenHeader, Logo } from '../components/Shell'
@@ -14,7 +14,7 @@ import { memberIdsOf, memberLabel } from '../lib/members'
 import { rememberedCategory, suggestDescriptions } from '../lib/suggestions'
 import { CURRENCIES, currencySymbol } from '../lib/currency'
 import { formatMoney, parseAmountToCents } from '../lib/money'
-import { formatShortDate, monthLabel, todayISO } from '../lib/date'
+import { formatShortDate, monthKey, monthLabel, todayISO } from '../lib/date'
 
 function toPercentInputs(shares: Record<string, number>): Record<string, string> {
   return Object.fromEntries(Object.entries(shares).map(([id, bps]) => [id, String(bps / 100)]))
@@ -38,6 +38,8 @@ export function ExpensesScreen() {
   const [parts, setParts] = useState<Parts>({})
   const [splitMode, setSplitMode] = useState<'percent' | 'parts'>('percent')
   const [editingId, setEditingId] = useState<string | null>(null)
+  const [recurrence, setRecurrence] = useState<Recurrence>('none')
+  const [query, setQuery] = useState('')
   const [error, setError] = useState('')
 
   const memberIds = memberIdsOf(householdMembers, user)
@@ -49,6 +51,13 @@ export function ExpensesScreen() {
   const label = (id: string) => memberLabel(id, householdMembers, user?.id)
   const suggestions = suggestDescriptions(allExpenses, description)
   const partsPreview = splitMode === 'parts' ? sharesFromParts(parts) : null
+  const needle = query.trim().toLowerCase()
+  const shown = needle
+    ? allExpenses
+        .filter((expense) => [expense.description, expense.category, expense.note, label(expense.paidBy)]
+          .join(' ').toLowerCase().includes(needle))
+        .sort((a, b) => b.spentOn.localeCompare(a.spentOn) || b.createdAt.localeCompare(a.createdAt))
+    : expenses
 
 
   function changeDescription(value: string) {
@@ -87,6 +96,7 @@ export function ExpensesScreen() {
     setPercents(toPercentInputs(even))
     setParts(partsFromShares(even))
     setSplitMode('percent')
+    setRecurrence('none')
   }
 
   function openForm(expense?: Expense) {
@@ -103,6 +113,7 @@ export function ExpensesScreen() {
       setPayerId(expense.paidBy)
       setPercents(toPercentInputs(expense.shares))
       setParts(partsFromShares(expense.shares))
+      setRecurrence(expense.recurrence ?? 'none')
     } else {
       setEditingId(null)
     }
@@ -140,6 +151,7 @@ export function ExpensesScreen() {
       shares,
       currency,
       baseAmountCents: converted,
+      recurrence,
     }
     if (editingId) await updateExpense(editingId, input)
     else await addExpense(input)
@@ -187,12 +199,31 @@ export function ExpensesScreen() {
 
       </div>
 
+      <label className="mt-3 block">
+        <span className="sr-only">Buscar gastos</span>
+        <span className="flex items-center gap-2 rounded-lg border border-line bg-field px-3">
+          <Search className="size-4 shrink-0 text-muted" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Buscar en todos los meses"
+            aria-label="Buscar gastos"
+            className="w-full bg-transparent py-2 text-[13px] text-ink placeholder:text-muted/60 focus:outline-none"
+          />
+        </span>
+      </label>
+      {needle && (
+        <p className="mt-1.5 px-1 text-[10.5px] text-muted">
+          {shown.length} resultado{shown.length === 1 ? '' : 's'} en todos los meses
+        </p>
+      )}
+
       <Button className="mt-3 w-full" onClick={() => openForm()}>
         <Plus className="size-4" />
         Agregar gasto
       </Button>
 
-      {expenses.length === 0 && !busy ? (
+      {shown.length === 0 && !busy ? (
         <div className="mt-4">
           <EmptyState
             icon={<Wallet className="size-6" />}
@@ -207,7 +238,7 @@ export function ExpensesScreen() {
         </div>
       ) : (
         <div className="card mt-4 divide-y divide-line overflow-hidden">
-          {expenses.map((expense) => (
+          {shown.map((expense) => (
             <div key={expense.id} className="flex items-center gap-3 px-4 py-3">
               <button
                 type="button"
@@ -222,7 +253,8 @@ export function ExpensesScreen() {
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-[13.5px] font-semibold text-ink">{expense.description}</p>
                   <p className="mt-0.5 text-[10.5px] text-muted">
-                    {formatShortDate(expense.spentOn)} · {expense.category} · pagó {label(expense.paidBy)}
+                    {needle && `${monthKey(expense.spentOn)} · `}{formatShortDate(expense.spentOn)} · {expense.category} · pagó {label(expense.paidBy)}
+                    {expense.recurrence === 'monthly' ? ' · mensual' : ''}
                     {expense.note ? ` · ${expense.note}` : ''}
                   </p>
                 </div>
@@ -345,6 +377,18 @@ export function ExpensesScreen() {
               <Input type="date" value={spentOn} onChange={(event) => setSpentOn(event.target.value)} />
             </label>
           </div>
+          <label className="block">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Repetir</span>
+            <select
+              value={recurrence}
+              onChange={(event) => setRecurrence(event.target.value as Recurrence)}
+              className="w-full rounded-lg border border-line bg-field px-3 py-2 text-[13px] text-ink focus:border-brand focus:outline-none"
+              aria-label="Repetir"
+            >
+              <option value="none">Sólo una vez</option>
+              <option value="monthly">Todos los meses (12)</option>
+            </select>
+          </label>
           <label className="block">
             <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Pagó</span>
             <select

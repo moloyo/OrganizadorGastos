@@ -17,11 +17,17 @@ import type {
   HouseholdMember,
   InviteInfo,
   OfflineStatus,
+  Recurrence,
   SessionUser,
   Snapshot,
+  Transfer,
+  Trip,
 } from '../types'
 import { getAdapter, cloudConfigured, makeId } from '../lib/adapters'
-import { currentMonthKey, monthKey, shiftMonth } from '../lib/date'
+import { isCurrency } from '../lib/currency'
+import { normalizeCategory } from '../lib/constants'
+import { equalShares } from '../lib/balance'
+import { addMonthsToISO, currentMonthKey, monthKey, shiftMonth } from '../lib/date'
 import { sumCents, totalsByCategory } from '../lib/money'
 import { shouldRefreshFromRealtime } from '../lib/realtime'
 
@@ -45,6 +51,14 @@ interface AppContextValue {
   setBaseCurrency: (code: CurrencyCode) => Promise<void>
   householdMembers: HouseholdMember[]
   householdInvites: HouseholdInvite[]
+  trips: Trip[]
+  activeTripId: string | null
+  setActiveTrip: (id: string | null) => void
+  createTrip: (trip: Trip) => Promise<void>
+  deleteTrip: (id: string) => Promise<void>
+  transfers: Transfer[]
+  addTransfer: (transfer: Transfer) => Promise<void>
+  deleteTransfer: (id: string) => Promise<void>
   isCloud: boolean
   month: string
   goToMonth: (key: string) => void
@@ -60,6 +74,10 @@ interface AppContextValue {
   updateExpense: (id: string, input: NewExpenseInput) => Promise<void>
   deleteExpense: (id: string) => Promise<void>
   clearExpenses: () => Promise<void>
+  importCsvRows: (rows: {
+    description: string; amountCents: number; category: string;
+    spentOn: string; paidBy: string | null; currency: string | null
+  }[]) => Promise<number>
   refreshHousehold: () => Promise<void>
   createInvite: () => Promise<HouseholdInvite>
   revokeInvite: (token: string) => Promise<void>
@@ -88,7 +106,22 @@ export interface NewExpenseInput {
   shares: Expense['shares']
   currency: CurrencyCode
   baseAmountCents: number
+  recurrence: Recurrence
 }
+
+function resolveImportedPayer(
+  raw: string | null,
+  members: HouseholdMember[],
+  currentUserId?: string,
+): string {
+  if (!raw) return currentUserId ?? ''
+  const value = raw.trim().toLowerCase()
+  const match = members.find((member) =>
+    member.email.toLowerCase() === value || member.userId.toLowerCase() === value)
+  return match?.userId ?? currentUserId ?? ''
+}
+
+const isCurrencyCode = isCurrency
 
 const AppContext = createContext<AppContextValue | null>(null)
 
@@ -103,6 +136,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [householdInvites, setHouseholdInvites] = useState<HouseholdInvite[]>([])
   const [month, setMonth] = useState(currentMonthKey)
   const [expenses, setExpenses] = useState<Expense[]>([])
+  const [transfers, setTransfers] = useState<Transfer[]>([])
+  const [trips, setTrips] = useState<Trip[]>([])
+  const [activeTripId, setActiveTripId] = useState<string | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
   const [offlineStatus, setOfflineStatus] = useState<OfflineStatus>(
     () =>
@@ -183,13 +219,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /* --------------------------- Datos iniciales --------------------------- */
 
   const reloadAll = useCallback(async () => {
-    const next = await adapter.listExpenses()
-    setExpenses(next)
+    const [nextExpenses, nextTransfers, nextTrips] = await Promise.all([
+      adapter.listExpenses(),
+      adapter.listTransfers(),
+      adapter.listTrips(),
+    ])
+    setExpenses(nextExpenses)
+    setTransfers(nextTransfers)
+    setTrips(nextTrips)
   }, [adapter])
 
   useEffect(() => {
     if (!user) {
       setExpenses([])
+      setTransfers([])
+      setTrips([])
+      setActiveTripId(null)
       setLoaded(true)
       return
     }
@@ -261,12 +306,29 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   /* ------------------------------- Derivados ------------------------------- */
 
+  const scopedExpenses = useMemo(
+    () => expenses.filter((expense) => (expense.tripId ?? null) === activeTripId),
+    [expenses, activeTripId],
+  )
+  const scopedTransfers = useMemo(
+    () => transfers.filter((transfer) => (transfer.tripId ?? null) === activeTripId),
+    [transfers, activeTripId],
+  )
+  const activeTrip = trips.find((trip) => trip.id === activeTripId) ?? null
+  const baseCurrency: CurrencyCode = activeTrip?.baseCurrency ?? household?.baseCurrency ?? 'EUR'
+
+  useEffect(() => {
+    if (activeTripId && trips.length > 0 && !trips.some((trip) => trip.id === activeTripId)) {
+      setActiveTripId(null)
+    }
+  }, [activeTripId, trips])
+
   const visibleExpenses = useMemo(
     () =>
-      expenses
+      scopedExpenses
         .filter((expense) => monthKey(expense.spentOn) === month)
         .sort((a, b) => b.spentOn.localeCompare(a.spentOn) || b.createdAt.localeCompare(a.createdAt)),
-    [expenses, month],
+    [scopedExpenses, month],
   )
 
   const totalCents = useMemo(() => sumCents(visibleExpenses), [visibleExpenses])
@@ -275,30 +337,37 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /* ------------------------------- Acciones ------------------------------- */
 
   const addExpense = useCallback(
-    async ({ description, amountCents, category, spentOn, note = '', paidBy, shares, currency, baseAmountCents }: NewExpenseInput) => {
-      const expense: Expense = {
+    async ({ description, amountCents, category, spentOn, note = '', paidBy, shares, currency, baseAmountCents, recurrence }: NewExpenseInput) => {
+      const groupId = recurrence === 'monthly' ? makeId() : null
+      const count = recurrence === 'monthly' ? 12 : 1
+      const createdAt = new Date().toISOString()
+      const copies: Expense[] = Array.from({ length: count }, (_, index) => ({
         id: makeId(),
         description: description.trim(),
         amountCents,
         category,
-        spentOn,
+        spentOn: index === 0 ? spentOn : addMonthsToISO(spentOn, index),
         note,
         paidBy,
         shares,
         currency,
         baseAmountCents,
-        createdAt: new Date().toISOString(),
-      }
-      setExpenses((prev) => [expense, ...prev])
+        tripId: activeTripId,
+        recurrence,
+        recurrenceGroupId: groupId,
+        createdAt,
+      }))
+      setExpenses((prev) => [...copies, ...prev])
       try {
-        await adapter.saveExpense(expense)
-        toast('Gasto agregado.', 'success')
+        if (copies.length === 1) await adapter.saveExpense(copies[0])
+        else await adapter.saveExpenses(copies)
+        toast(count > 1 ? `Gasto agregado y repetido ${count} meses.` : 'Gasto agregado.', 'success')
       } catch (error) {
         toast(error instanceof Error ? error.message : 'No pudimos guardar el gasto.', 'error')
         await reloadAll().catch(() => {})
       }
     },
-    [adapter, reloadAll, toast],
+    [adapter, activeTripId, reloadAll, toast],
   )
 
   const updateExpense = useCallback(
@@ -306,7 +375,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       const previous = expenses
       const original = previous.find((item) => item.id === id)
       const updated: Expense = {
-        ...(original ?? { id, createdAt: new Date().toISOString() }),
+        ...(original ?? { id, createdAt: new Date().toISOString(), recurrence: input.recurrence as Recurrence }),
         description: input.description.trim(),
         amountCents: input.amountCents,
         category: input.category,
@@ -365,6 +434,94 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, refreshHousehold],
   )
 
+  const addTransfer = useCallback(
+    async (transfer: Transfer) => {
+      setTransfers((prev) => [transfer, ...prev])
+      try {
+        await adapter.addTransfer(transfer)
+        toast('Pago registrado.', 'success')
+      } catch (error) {
+        setTransfers((prev) => prev.filter((item) => item.id !== transfer.id))
+        toast(error instanceof Error ? error.message : 'No pudimos registrar el pago.', 'error')
+        await reloadAll().catch(() => {})
+      }
+    },
+    [adapter, reloadAll, toast],
+  )
+
+  const deleteTransfer = useCallback(
+    async (id: string) => {
+      const previous = transfers
+      setTransfers((prev) => prev.filter((item) => item.id !== id))
+      try { await adapter.deleteTransfer(id); toast('Pago eliminado.', 'success') }
+      catch (error) {
+        setTransfers(previous)
+        toast(error instanceof Error ? error.message : 'No pudimos eliminar el pago.', 'error')
+      }
+    },
+    [adapter, transfers, toast],
+  )
+
+  const createTrip = useCallback(
+    async (trip: Trip) => {
+      await adapter.createTrip(trip)
+      await reloadAll()
+      toast(`Viaje ${trip.name} creado.`, 'success')
+    },
+    [adapter, reloadAll, toast],
+  )
+
+  const deleteTrip = useCallback(
+    async (id: string) => {
+      await adapter.deleteTrip(id)
+      if (activeTripId === id) setActiveTripId(null)
+      await reloadAll()
+      toast('Viaje eliminado. Sus gastos volvieron al hogar.', 'success')
+    },
+    [adapter, activeTripId, reloadAll, toast],
+  )
+
+  const importCsvRows = useCallback(
+    async (rows: {
+      description: string; amountCents: number; category: string;
+      spentOn: string; paidBy: string | null; currency: string | null
+    }[]) => {
+      if (rows.length === 0) return 0
+      const imported = rows.map<Expense>((row) => {
+        const currency: CurrencyCode = isCurrencyCode(row.currency) ? row.currency : baseCurrency
+        const cents = row.amountCents
+        return {
+          id: makeId(),
+          description: row.description,
+          amountCents: cents,
+          baseAmountCents: cents,
+          currency,
+          category: normalizeCategory(row.category),
+          spentOn: row.spentOn,
+          note: '',
+          paidBy: resolveImportedPayer(row.paidBy, householdMembers, user?.id),
+          shares: equalShares(householdMembers.length > 0
+            ? householdMembers.map((member) => member.userId)
+            : user ? [user.id] : []),
+          tripId: activeTripId,
+          recurrence: 'none',
+          createdAt: new Date().toISOString(),
+        }
+      })
+      setExpenses((prev) => [...imported, ...prev])
+      try {
+        await adapter.saveExpenses(imported)
+        toast(`Importados ${imported.length} gastos.`, 'success')
+        return imported.length
+      } catch (error) {
+        setExpenses((prev) => prev.filter((item) => !imported.some((row) => row.id === item.id)))
+        toast(error instanceof Error ? error.message : 'No pudimos importar los gastos.', 'error')
+        return 0
+      }
+    },
+    [adapter, activeTripId, baseCurrency, householdMembers, toast, user?.id],
+  )
+
   const createInvite = useCallback(async () => {
     const invite = await adapter.createHouseholdInvite()
     await refreshHousehold()
@@ -421,6 +578,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await adapter.signOut()
     setUser(null)
     setExpenses([])
+    setTransfers([])
+    setTrips([])
+    setActiveTripId(null)
   }, [adapter])
   const resetPassword = useCallback((email: string) => adapter.resetPassword(email), [adapter])
   const updatePassword = useCallback((password: string) => adapter.updatePassword(password), [adapter])
@@ -448,19 +608,22 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value: AppContextValue = {
     ready, loaded, busy, offlineStatus, retrySync,
     user, household,
-    baseCurrency: household?.baseCurrency ?? 'EUR',
+    baseCurrency,
     setBaseCurrency,
     householdMembers, householdInvites,
+    trips, activeTripId, setActiveTrip: setActiveTripId,
+    createTrip, deleteTrip,
+    transfers, addTransfer, deleteTransfer,
     isCloud: cloudConfigured,
     month,
     goToMonth: (key: string) => setMonth(key),
     shiftMonth: (amount: number) => setMonth((prev) => shiftMonth(prev, amount)),
     expenses: visibleExpenses,
-    allExpenses: expenses,
+    allExpenses: scopedExpenses,
     totalCents,
     totals,
     toasts, toast, dismissToast,
-    addExpense, updateExpense, deleteExpense, clearExpenses,
+    addExpense, updateExpense, deleteExpense, clearExpenses, importCsvRows,
     refreshHousehold, createInvite, revokeInvite, renameHousehold, leaveHousehold,
     joinHousehold, getInviteInfo,
     signIn, signUp, signOut, resetPassword, updatePassword, deleteAccount,

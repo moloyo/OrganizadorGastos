@@ -10,7 +10,10 @@ import { canLeaveHousehold } from '../lib/household'
 import { buildInviteLink } from '../lib/invite'
 import { applyTheme, readTheme, storeTheme, THEMES, type ThemeId } from '../lib/theme'
 import { CURRENCIES } from '../lib/currency'
-import type { CurrencyCode, Snapshot } from '../types'
+import { parseExpensesCsv } from '../lib/csv'
+import { makeId } from '../lib/adapters'
+import { todayISO } from '../lib/date'
+import type { CurrencyCode, Snapshot, Trip } from '../types'
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -28,15 +31,20 @@ export function SettingsScreen() {
     user, household, householdMembers, householdInvites, isCloud,
     refreshHousehold, createInvite, revokeInvite, renameHousehold, setBaseCurrency, leaveHousehold,
     signOut, exportData, importData, wipeData, deleteAccount,
-    toast, clearExpenses,
+    toast, clearExpenses, trips, createTrip, deleteTrip, importCsvRows,
   } = useApp()
   const fileRef = useRef<HTMLInputElement>(null)
+  const csvRef = useRef<HTMLInputElement>(null)
   const [theme, setTheme] = useState<ThemeId>(() => readTheme())
   const [editName, setEditName] = useState(household?.name ?? '')
   const [editCurrency, setEditCurrency] = useState<CurrencyCode>(household?.baseCurrency ?? 'EUR')
   const [newLink, setNewLink] = useState<string | null>(null)
   const [newToken, setNewToken] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [tripName, setTripName] = useState('')
+  const [tripCurrency, setTripCurrency] = useState<CurrencyCode>('EUR')
+  const [tripStart, setTripStart] = useState(todayISO())
+  const [tripEnd, setTripEnd] = useState(todayISO())
 
   useEffect(() => {
     setEditName(household?.name ?? '')
@@ -134,6 +142,44 @@ export function SettingsScreen() {
       setBusy(null)
       if (fileRef.current) fileRef.current.value = ''
     }
+  }
+
+  async function handleCsvImport(file: File) {
+    setBusy('csv')
+    try {
+      const result = parseExpensesCsv(await file.text())
+      if (result.rows.length === 0) {
+        toast(result.errors[0] ?? 'No se encontraron gastos en el archivo.', 'error')
+        return
+      }
+      if (!window.confirm(`Se encontraron ${result.rows.length} gastos. ¿Importarlos?`)) return
+      const count = await importCsvRows(result.rows)
+      if (result.errors.length > 0) toast(`${count} gastos importados. ${result.errors.length} filas se omitieron.`, 'info')
+    } catch (error) {
+      toast(error instanceof Error ? error.message : 'No pudimos importar el CSV.', 'error')
+    } finally {
+      setBusy(null)
+      if (csvRef.current) csvRef.current.value = ''
+    }
+  }
+
+  async function handleCreateTrip() {
+    const name = tripName.trim()
+    if (!name) { toast('Poné un nombre para el viaje.', 'error'); return }
+    setBusy('trip')
+    const trip: Trip = {
+      id: makeId(), name, baseCurrency: tripCurrency,
+      startsOn: tripStart, endsOn: tripEnd, archived: false,
+    }
+    try { await createTrip(trip); setTripName(''); toast('Viaje creado.', 'success') }
+    catch (error) { toast(error instanceof Error ? error.message : 'No pudimos crear el viaje.', 'error') }
+    finally { setBusy(null) }
+  }
+
+  async function handleDeleteTrip(id: string) {
+    if (!window.confirm('¿Eliminar el viaje? Sus gastos vuelven al hogar.')) return
+    try { await deleteTrip(id) }
+    catch (error) { toast(error instanceof Error ? error.message : 'No pudimos eliminar el viaje.', 'error') }
   }
 
   async function handleLeave() {
@@ -294,6 +340,42 @@ export function SettingsScreen() {
         </Section>
       )}
 
+      <Section title="Viajes">
+        <div className="card space-y-3 p-4">
+          <p className="text-[11.5px] leading-relaxed text-muted">
+            Un viaje es un bolsillo separado: tiene su propia moneda base y sus gastos no mezclan con los del hogar.
+          </p>
+          {trips.length > 0 && (
+            <div className="divide-y divide-line overflow-hidden rounded-xl border border-line">
+              {trips.map((trip) => (
+                <div key={trip.id} className="flex items-center gap-2 px-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[12.5px] font-semibold text-ink">{trip.name}</p>
+                    <p className="text-[10.5px] text-muted">{trip.baseCurrency} · {trip.startsOn} al {trip.endsOn}</p>
+                  </div>
+                  <button onClick={() => void handleDeleteTrip(trip.id)} aria-label={`Eliminar viaje ${trip.name}`}
+                    className="grid size-7 place-items-center rounded-lg text-muted hover:bg-danger-soft hover:text-danger-ink">
+                    <Trash2 className="size-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <Input value={tripName} onChange={(event) => setTripName(event.target.value)} placeholder="Nombre del viaje" aria-label="Nombre del viaje" />
+          <div className="grid grid-cols-3 gap-2">
+            <select value={tripCurrency} onChange={(event) => setTripCurrency(event.target.value as CurrencyCode)}
+              className="rounded-lg border border-line bg-field px-2 py-2 text-[12px] text-ink" aria-label="Moneda del viaje">
+              {CURRENCIES.map((item) => <option key={item.code} value={item.code}>{item.code}</option>)}
+            </select>
+            <Input type="date" value={tripStart} onChange={(event) => setTripStart(event.target.value)} aria-label="Inicio del viaje" />
+            <Input type="date" value={tripEnd} onChange={(event) => setTripEnd(event.target.value)} aria-label="Fin del viaje" />
+          </div>
+          <Button size="sm" className="w-full" onClick={() => void handleCreateTrip()} disabled={busy === 'trip'}>
+            Crear viaje
+          </Button>
+        </div>
+      </Section>
+
       <Section title="Apariencia">
         <div className="card p-3">
           <div className="grid grid-cols-3 gap-2">
@@ -336,6 +418,10 @@ export function SettingsScreen() {
             <Upload className="size-4 text-brand" />
             <span className="flex-1 text-[13px] font-medium text-ink">Importar desde un archivo</span>
           </button>
+          <button onClick={() => csvRef.current?.click()} disabled={busy === 'csv'} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-brand-soft/20">
+            <Upload className="size-4 text-brand" />
+            <span className="flex-1 text-[13px] font-medium text-ink">Importar desde tricount (CSV)</span>
+          </button>
           <button onClick={() => void clearExpenses()} className="flex w-full items-center gap-3 px-4 py-3.5 text-left transition hover:bg-brand-soft/20">
             <Check className="size-4 text-brand" />
             <span className="flex-1 text-[13px] font-medium text-ink">Vaciar lista de gastos</span>
@@ -349,6 +435,16 @@ export function SettingsScreen() {
           onChange={(event) => {
             const file = event.target.files?.[0]
             if (file) void handleImport(file)
+          }}
+        />
+        <input
+          ref={csvRef}
+          type="file"
+          accept=".csv,text/csv"
+          className="hidden"
+          onChange={(event) => {
+            const file = event.target.files?.[0]
+            if (file) void handleCsvImport(file)
           }}
         />
       </Section>

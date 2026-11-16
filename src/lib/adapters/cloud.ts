@@ -6,8 +6,11 @@ import type {
   HouseholdInvite,
   HouseholdMember,
   InviteInfo,
+  Recurrence,
   SessionUser,
   Snapshot,
+  Transfer,
+  Trip,
 } from '../../types'
 import { isUuid, newUuid } from '../uuid'
 import { isCurrency, withCurrencyDefaults } from '../currency'
@@ -26,7 +29,32 @@ interface ExpenseRow {
   shares: Record<string, number>
   currency: string
   base_amount_cents: number
+  trip_id: string | null
+  recurrence: string
+  recurrence_group_id: string | null
   created_at: string
+}
+
+interface TransferRow {
+  id: string
+  from_user_id: string
+  to_user_id: string
+  amount_cents: number
+  currency: string
+  base_amount_cents: number
+  note: string | null
+  paid_on: string
+  trip_id: string | null
+  created_at: string
+}
+
+interface TripRow {
+  id: string
+  name: string
+  base_currency: string
+  starts_on: string
+  ends_on: string
+  archived: boolean
 }
 
 interface HouseholdRow {
@@ -114,6 +142,9 @@ function mapExpense(row: ExpenseRow): Expense {
     shares: row.shares,
     currency: isCurrency(row.currency) ? row.currency : 'EUR',
     baseAmountCents: row.base_amount_cents,
+    tripId: row.trip_id ?? null,
+    recurrence: row.recurrence === 'monthly' ? 'monthly' : 'none',
+    recurrenceGroupId: row.recurrence_group_id ?? null,
     createdAt: row.created_at,
   })
 }
@@ -131,7 +162,36 @@ function toExpenseRow(expense: Expense, householdId: string): ExpenseRow {
     shares: expense.shares,
     currency: expense.currency,
     base_amount_cents: expense.baseAmountCents,
+    trip_id: expense.tripId ?? null,
+    recurrence: expense.recurrence ?? 'none',
+    recurrence_group_id: expense.recurrenceGroupId ?? null,
     created_at: expense.createdAt,
+  }
+}
+
+function mapTransfer(row: TransferRow): Transfer {
+  return {
+    id: row.id,
+    from: row.from_user_id,
+    to: row.to_user_id,
+    amountCents: row.amount_cents,
+    currency: isCurrency(row.currency) ? row.currency : 'EUR',
+    baseAmountCents: row.base_amount_cents,
+    note: row.note ?? '',
+    paidOn: row.paid_on,
+    tripId: row.trip_id ?? null,
+    createdAt: row.created_at,
+  }
+}
+
+function mapTrip(row: TripRow): Trip {
+  return {
+    id: row.id,
+    name: row.name,
+    baseCurrency: isCurrency(row.base_currency) ? row.base_currency : 'EUR',
+    startsOn: row.starts_on,
+    endsOn: row.ends_on,
+    archived: Boolean(row.archived),
   }
 }
 
@@ -451,6 +511,14 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
       return expense
     },
 
+    async saveExpenses(expenses) {
+      if (expenses.length === 0) return
+      const householdId = await requireHouseholdId()
+      const rows = expenses.map((expense) => toExpenseRow(expense, householdId))
+      const { error } = await client.from('expenses').upsert(rows, { onConflict: 'id' })
+      if (error) throw new Error(error.message)
+    },
+
     async deleteExpense(id) {
       const { error } = await client.from('expenses').delete().eq('id', id)
       if (error) throw new Error(error.message)
@@ -462,6 +530,71 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
         .from('expenses')
         .delete()
         .eq('household_id', householdId)
+      if (error) throw new Error(error.message)
+    },
+
+    /* --------------------------- Transferencias --------------------------- */
+
+    async listTransfers() {
+      const { data, error } = await client
+        .from('transfers')
+        .select('*')
+        .order('paid_on', { ascending: false })
+        .order('created_at', { ascending: false })
+      if (error) throw new Error(error.message)
+      return ((data ?? []) as TransferRow[]).map(mapTransfer)
+    },
+
+    async addTransfer(transfer) {
+      const householdId = await requireHouseholdId()
+      const { error } = await client.from('transfers').insert({
+        id: transfer.id,
+        household_id: householdId,
+        trip_id: transfer.tripId ?? null,
+        from_user_id: transfer.from,
+        to_user_id: transfer.to,
+        amount_cents: transfer.amountCents,
+        currency: transfer.currency,
+        base_amount_cents: transfer.baseAmountCents,
+        note: transfer.note,
+        paid_on: transfer.paidOn,
+        created_at: transfer.createdAt,
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async deleteTransfer(id) {
+      const { error } = await client.from('transfers').delete().eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+
+    /* ------------------------------- Viajes ------------------------------- */
+
+    async listTrips() {
+      const { data, error } = await client
+        .from('trips')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw new Error(error.message)
+      return ((data ?? []) as TripRow[]).map(mapTrip)
+    },
+
+    async createTrip(trip) {
+      const householdId = await requireHouseholdId()
+      const { error } = await client.from('trips').insert({
+        id: trip.id,
+        household_id: householdId,
+        name: trip.name,
+        base_currency: trip.baseCurrency,
+        starts_on: trip.startsOn,
+        ends_on: trip.endsOn,
+        archived: trip.archived,
+      })
+      if (error) throw new Error(error.message)
+    },
+
+    async deleteTrip(id) {
+      const { error } = await client.from('trips').delete().eq('id', id)
       if (error) throw new Error(error.message)
     },
 
@@ -500,7 +633,8 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
   const WRITES = [
     'deleteAccount', 'renameHousehold', 'setHouseholdBaseCurrency', 'createHouseholdInvite',
     'revokeHouseholdInvite', 'joinHousehold', 'leaveHousehold',
-    'saveExpense', 'deleteExpense', 'clearExpenses', 'importAll', 'wipe',
+    'saveExpense', 'saveExpenses', 'deleteExpense', 'clearExpenses', 'importAll', 'wipe',
+    'addTransfer', 'deleteTransfer', 'createTrip', 'deleteTrip',
   ] as const
   const mutable = adapter as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>
   for (const name of WRITES) {

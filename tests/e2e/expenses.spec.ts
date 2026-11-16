@@ -79,6 +79,45 @@ test('un gasto en otra moneda pide el equivalente y lo muestra', async ({ page }
   await expect(fila).toContainText('≈ € 18,50')
 })
 
+test('la búsqueda filtra por descripción', async ({ page }) => {
+  await page.goto('/')
+  await page.getByLabel('Buscar gastos').fill('subte')
+  await expect(page.getByText('Subte')).toBeVisible()
+  await expect(page.getByText('Verdulería')).toBeHidden()
+  await expect(page.getByText(/resultado/)).toBeVisible()
+})
+
+test('un gasto mensual aparece también en el mes siguiente', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Agregar gasto' }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByPlaceholder('Ej.: Verdulería').fill('Alquiler')
+  await dialog.getByLabel('Monto').fill('1000')
+  await dialog.getByRole('combobox', { name: 'Repetir' }).selectOption('monthly')
+  await dialog.getByRole('button', { name: 'Guardar' }).click()
+  await expect(page.getByText('Alquiler')).toBeVisible()
+  await page.getByRole('button', { name: 'Mes siguiente' }).click()
+  await expect(page.getByText('Alquiler')).toBeVisible()
+})
+
+test('un viaje es un ámbito separado con su propia moneda', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Ajustes' }).click()
+  await page.getByLabel('Nombre del viaje').fill('Viaje a la playa')
+  await page.getByRole('combobox', { name: 'Moneda del viaje' }).selectOption('USD')
+  await page.getByRole('button', { name: 'Crear viaje' }).click()
+  await page.getByRole('link', { name: 'Gastos' }).click()
+  await page.getByRole('button', { name: 'Viaje a la playa', exact: true }).click()
+  await page.getByRole('button', { name: 'Agregar gasto' }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByPlaceholder('Ej.: Verdulería').fill('Hotel')
+  await dialog.getByLabel('Monto').fill('200')
+  await dialog.getByRole('button', { name: 'Guardar' }).click()
+  await expect(page.getByText('Hotel')).toBeVisible()
+  await page.getByRole('button', { name: 'Hogar' }).click()
+  await expect(page.getByText('Hotel')).toBeHidden()
+})
+
 test('se agrega un gasto y persiste tras recargar', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Gastos' })).toBeVisible()

@@ -5,10 +5,10 @@ import { ScreenHeader, Logo } from '../components/Shell'
 import { EmptyState } from '../components/ui'
 import { categoryColor } from '../lib/constants'
 import { monthKey, monthLabel, shiftMonth as shiftMonthKey } from '../lib/date'
-import { compareCategories, formatCents, totalsByCategory } from '../lib/money'
+import { compareCategories, formatCents, monthlyTotals, totalsByCategory } from '../lib/money'
 
 export function CategoriesScreen() {
-  const { allExpenses, totals, totalCents, month, shiftMonth, household, busy, baseCurrency } = useApp()
+  const { allExpenses, totals, totalCents, month, shiftMonth, goToMonth, household, busy, baseCurrency } = useApp()
   const previousMonth = shiftMonthKey(month, -1)
 
   const ranking = useMemo(
@@ -18,6 +18,8 @@ export function CategoriesScreen() {
     ),
     [totals, allExpenses, previousMonth],
   )
+  const trend = useMemo(() => monthlyTotals(allExpenses, month), [allExpenses, month])
+  const maxTrend = Math.max(...trend.map((item) => item.cents), 1)
 
   return (
     <div className="animate-rise">
@@ -49,6 +51,24 @@ export function CategoriesScreen() {
         >
           <ChevronRight className="size-5" />
         </button>
+      </div>
+
+      <div className="card mt-3 p-4">
+        <p className="text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted">Últimos 6 meses</p>
+        <div className="mt-3 flex h-24 items-end gap-2">
+          {trend.map((item) => (
+            <button
+              key={item.month}
+              onClick={() => goToMonth(item.month)}
+              title={`${monthLabel(item.month)} · ${formatCents(item.cents, baseCurrency)}`}
+              className="group flex h-full flex-1 flex-col items-center justify-end gap-1"
+            >
+              <span className={`w-full rounded-t ${item.month === month ? 'bg-brand' : 'bg-brand-soft'}`}
+                style={{ height: `${Math.max((item.cents / maxTrend) * 100, 3)}%` }} />
+              <span className="text-[9px] text-muted">{item.month.slice(5)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {ranking.length === 0 && !busy ? (

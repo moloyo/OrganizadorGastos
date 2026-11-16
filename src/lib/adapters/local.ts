@@ -9,6 +9,8 @@ import type {
   InviteInfo,
   SessionUser,
   Snapshot,
+  Transfer,
+  Trip,
 } from '../../types'
 
 const DB_KEY = 'gastos:db:v1'
@@ -24,6 +26,8 @@ interface LocalDB {
   expenses: Expense[]
   householdName: string
   baseCurrency: CurrencyCode
+  transfers: Transfer[]
+  trips: Trip[]
 }
 
 const SEED_EXPENSES: Expense[] = [
@@ -38,6 +42,7 @@ const SEED_EXPENSES: Expense[] = [
     shares: { [LOCAL_USER.id]: 10000 },
     currency: 'EUR',
     baseAmountCents: 18500,
+    recurrence: 'none',
     createdAt: '2026-11-14T10:00:00.000Z',
   },
   {
@@ -51,6 +56,7 @@ const SEED_EXPENSES: Expense[] = [
     shares: { [LOCAL_USER.id]: 10000 },
     currency: 'EUR',
     baseAmountCents: 75700,
+    recurrence: 'none',
     createdAt: '2026-11-13T10:00:00.000Z',
   },
   {
@@ -64,6 +70,7 @@ const SEED_EXPENSES: Expense[] = [
     shares: { [LOCAL_USER.id]: 10000 },
     currency: 'EUR',
     baseAmountCents: 12300,
+    recurrence: 'none',
     createdAt: '2026-11-10T10:00:00.000Z',
   },
 ]
@@ -74,6 +81,7 @@ function withPayerAndShares(expense: Expense, base: CurrencyCode): Expense {
     ...expense,
     paidBy: expense.paidBy ?? LOCAL_USER.id,
     shares: expense.shares ?? { [LOCAL_USER.id]: 10000 },
+    recurrence: expense.recurrence ?? 'none',
   }, base)
 }
 
@@ -84,7 +92,13 @@ function read(): LocalDB {
       const parsed = JSON.parse(raw) as LocalDB
       if (parsed && Array.isArray(parsed.expenses)) {
         const base = isCurrency(parsed.baseCurrency) ? parsed.baseCurrency : 'EUR'
-        return { ...parsed, baseCurrency: base, expenses: parsed.expenses.map((expense) => withPayerAndShares(expense, base)) }
+        return {
+          ...parsed,
+          baseCurrency: base,
+          expenses: parsed.expenses.map((expense) => withPayerAndShares(expense, base)),
+          transfers: Array.isArray(parsed.transfers) ? parsed.transfers : [],
+          trips: Array.isArray(parsed.trips) ? parsed.trips : [],
+        }
       }
     }
   } catch {
@@ -94,6 +108,8 @@ function read(): LocalDB {
     expenses: SEED_EXPENSES.map((expense) => ({ ...expense })),
     householdName: 'Hogar de prueba',
     baseCurrency: 'EUR',
+    transfers: [],
+    trips: [],
   }
   write(fresh)
   return fresh
@@ -206,6 +222,12 @@ export function createLocalAdapter(): DataAdapter {
       write(db)
       return expense
     },
+    async saveExpenses(expenses) {
+      if (expenses.length === 0) return
+      const db = read()
+      db.expenses = [...expenses, ...db.expenses]
+      write(db)
+    },
     async deleteExpense(id) {
       const db = read()
       db.expenses = db.expenses.filter((item) => item.id !== id)
@@ -214,6 +236,38 @@ export function createLocalAdapter(): DataAdapter {
     async clearExpenses() {
       const db = read()
       db.expenses = []
+      write(db)
+    },
+
+    async listTransfers() {
+      return read().transfers
+    },
+    async addTransfer(transfer) {
+      const db = read()
+      db.transfers.unshift(transfer)
+      write(db)
+    },
+    async deleteTransfer(id) {
+      const db = read()
+      db.transfers = db.transfers.filter((item) => item.id !== id)
+      write(db)
+    },
+
+    async listTrips() {
+      return read().trips
+    },
+    async createTrip(trip) {
+      const db = read()
+      db.trips.unshift(trip)
+      write(db)
+    },
+    async deleteTrip(id) {
+      const db = read()
+      db.trips = db.trips.filter((item) => item.id !== id)
+      db.expenses = db.expenses.map((expense) =>
+        expense.tripId === id ? { ...expense, tripId: null } : expense)
+      db.transfers = db.transfers.map((transfer) =>
+        transfer.tripId === id ? { ...transfer, tripId: null } : transfer)
       write(db)
     },
 
@@ -231,11 +285,16 @@ export function createLocalAdapter(): DataAdapter {
         expenses: snapshot.expenses.map((expense) => withPayerAndShares(expense, db.baseCurrency)),
         householdName: db.householdName,
         baseCurrency: db.baseCurrency,
+        transfers: db.transfers,
+        trips: db.trips,
       })
     },
     async wipe() {
       const db = read()
-      write({ expenses: [], householdName: db.householdName, baseCurrency: db.baseCurrency })
+      write({
+        expenses: [], householdName: db.householdName, baseCurrency: db.baseCurrency,
+        transfers: [], trips: db.trips,
+      })
     },
   }
 }

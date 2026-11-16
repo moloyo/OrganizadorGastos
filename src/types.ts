@@ -1,4 +1,5 @@
 export type CurrencyCode = 'EUR' | 'ARS' | 'USD'
+export type Recurrence = 'none' | 'monthly'
 
 export interface Expense {
   id: string
@@ -17,7 +18,36 @@ export interface Expense {
   currency: CurrencyCode
   /** Equivalente en la moneda base del hogar; se usa para todos los totales. */
   baseAmountCents: number
+  /** Viaje al que pertenece; null = gastos del hogar. */
+  tripId?: string | null
+  recurrence: Recurrence
+  /** Identificador compartido por las cuotas de un gasto mensual. */
+  recurrenceGroupId?: string | null
   createdAt: string
+}
+
+/** Pago de un miembro a otro: descuenta del saldo en vez de sumar un gasto. */
+export interface Transfer {
+  id: string
+  from: string
+  to: string
+  amountCents: number
+  currency: CurrencyCode
+  baseAmountCents: number
+  note: string
+  paidOn: string
+  tripId?: string | null
+  createdAt: string
+}
+
+/** Bolsillo independiente con su propia moneda base. */
+export interface Trip {
+  id: string
+  name: string
+  baseCurrency: CurrencyCode
+  startsOn: string
+  endsOn: string
+  archived: boolean
 }
 
 export interface SessionUser {
@@ -112,8 +142,17 @@ export interface DataAdapter extends HouseholdAdapter {
 
   listExpenses(): Promise<Expense[]>
   saveExpense(expense: Expense): Promise<Expense>
+  saveExpenses(expenses: Expense[]): Promise<void>
   deleteExpense(id: string): Promise<void>
   clearExpenses(): Promise<void>
+
+  listTransfers(): Promise<Transfer[]>
+  addTransfer(transfer: Transfer): Promise<void>
+  deleteTransfer(id: string): Promise<void>
+
+  listTrips(): Promise<Trip[]>
+  createTrip(trip: Trip): Promise<void>
+  deleteTrip(id: string): Promise<void>
 
   exportAll(): Promise<Snapshot>
   importAll(snapshot: Snapshot): Promise<void>

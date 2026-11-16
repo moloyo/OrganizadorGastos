@@ -1,5 +1,6 @@
 import type { CurrencyCode, Expense } from '../types'
 import { baseAmountOf, DEFAULT_CURRENCY, formatMoney } from './currency'
+import { shiftMonth } from './date'
 
 export { formatMoney }
 
@@ -23,6 +24,23 @@ export function parseAmountToCents(value: string): number | null {
 
 export function sumCents(expenses: Expense[]): number {
   return expenses.reduce((total, expense) => total + baseAmountOf(expense), 0)
+}
+
+/** Totales de los últimos `count` meses terminando en `endMonth` (`yyyy-MM`). */
+export function monthlyTotals(
+  expenses: Expense[],
+  endMonth: string,
+  count = 6,
+): { month: string; cents: number }[] {
+  const byMonth = new Map<string, number>()
+  for (const expense of expenses) {
+    const key = expense.spentOn.slice(0, 7)
+    byMonth.set(key, (byMonth.get(key) ?? 0) + baseAmountOf(expense))
+  }
+  return Array.from({ length: count }, (_, index) => {
+    const month = shiftMonth(endMonth, index - count + 1)
+    return { month, cents: byMonth.get(month) ?? 0 }
+  })
 }
 
 export interface CategoryComparison {

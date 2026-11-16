@@ -161,6 +161,27 @@ describe('moneda base', () => {
   })
 })
 
+describe('transferencias', () => {
+  it('un pago entre miembros deja el saldo en cero', () => {
+    const expenses = [gasto(20000, ANA, { ana: 5000, lucas: 5000 })]
+    const transfer = { from: LUCAS, to: ANA, baseAmountCents: 10000, paidOn: '2026-11-16' }
+    expect(computeBalances(expenses, [ANA, LUCAS], [transfer]).balances).toEqual({ ana: 0, lucas: 0 })
+  })
+
+  it('un pago parcial reduce la deuda', () => {
+    const expenses = [gasto(20000, ANA, { ana: 5000, lucas: 5000 })]
+    const transfer = { from: LUCAS, to: ANA, baseAmountCents: 4000, paidOn: '2026-11-16' }
+    expect(computeBalances(expenses, [ANA, LUCAS], [transfer]).balances).toEqual({ ana: 6000, lucas: -6000 })
+  })
+
+  it('mesSummary ignora transferencias de otros meses', () => {
+    const expenses = [gasto(20000, ANA, { ana: 5000, lucas: 5000 })]
+    const transfer = { from: LUCAS, to: ANA, baseAmountCents: 10000, paidOn: '2026-10-16' }
+    expect(monthSummary(expenses, '2026-11', [ANA, LUCAS], [transfer]).balances)
+      .toEqual({ ana: 10000, lucas: -10000 })
+  })
+})
+
 describe('liquidación', () => {
   it('sin deudas no hay transferencias', () => {
     expect(settle({ ana: 0, lucas: 0 })).toEqual([])

@@ -92,11 +92,44 @@ function OfflineBanner() {
   )
 }
 
+function TripSwitcher() {
+  const { trips, activeTripId, setActiveTrip } = useApp()
+  if (trips.length === 0) return null
+  return (
+    <div className="mb-3 -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1" aria-label="Elegir ámbito">
+      <button
+        onClick={() => setActiveTrip(null)}
+        aria-pressed={activeTripId === null}
+        className={clsx(
+          'shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition',
+          activeTripId === null ? 'bg-brand text-on-brand' : 'bg-surface text-muted hover:text-ink',
+        )}
+      >
+        Hogar
+      </button>
+      {trips.map((trip) => (
+        <button
+          key={trip.id}
+          onClick={() => setActiveTrip(trip.id)}
+          aria-pressed={activeTripId === trip.id}
+          className={clsx(
+            'shrink-0 rounded-full px-3 py-1.5 text-[11px] font-semibold transition',
+            activeTripId === trip.id ? 'bg-brand text-on-brand' : 'bg-surface text-muted hover:text-ink',
+          )}
+        >
+          {trip.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[560px] flex-col">
       <main className="flex-1 px-4 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
         <OfflineBanner />
+        <TripSwitcher />
         {children}
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-[560px] justify-around border-t border-line bg-surface/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">

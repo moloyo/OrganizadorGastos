@@ -27,6 +27,14 @@ export function shiftMonth(key: string, amount: number): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
 }
 
+/** Suma meses a una fecha ISO `yyyy-MM-dd`, ajustando días que no existen. */
+export function addMonthsToISO(iso: string, amount: number): string {
+  const [year, month, day] = iso.split('-').map(Number)
+  const target = new Date(year, month - 1 + amount, 1)
+  const lastDay = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate()
+  return `${target.getFullYear()}-${String(target.getMonth() + 1).padStart(2, '0')}-${String(Math.min(day, lastDay)).padStart(2, '0')}`
+}
+
 export function monthLabel(key: string): string {
   const [year, month] = key.split('-').map(Number)
   const name = MONTHS[month - 1] ?? ''
