@@ -124,8 +124,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const refreshHousehold = useCallback(async () => {
-    const [nextHousehold, nextMembers, nextInvites] = await Promise.all([
-      adapter.getHousehold(),
+    // getHousehold crea el hogar si falta (ensure_household). Las otras RPC
+    // asumen que ya existe, así que van después: en paralelo hay carrera con
+    // cuentas nuevas que todavía no tienen hogar.
+    const nextHousehold = await adapter.getHousehold()
+    const [nextMembers, nextInvites] = await Promise.all([
       adapter.listHouseholdMembers(),
       adapter.listHouseholdInvites(),
     ])
