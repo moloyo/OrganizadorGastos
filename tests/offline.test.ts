@@ -12,7 +12,9 @@ class MemoryStorage implements StorageLike {
 function expense(id: string, amountCents: number): Expense {
   return {
     id, description: `Gasto ${id}`, amountCents, category: 'Otros',
-    spentOn: '2026-11-15', note: '', createdAt: '2026-11-15T00:00:00.000Z',
+    spentOn: '2026-11-15', note: '', paidBy: 'ana', shares: { ana: 10000 },
+    currency: 'EUR', baseAmountCents: amountCents,
+    createdAt: '2026-11-15T00:00:00.000Z',
   }
 }
 

@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import type { CurrencyCode, Expense } from '../types'
 import {
   ChevronLeft, ChevronRight, Plus, Trash2, Wallet,
 } from 'lucide-react'
@@ -6,27 +7,112 @@ import { useApp } from '../state/AppContext'
 import { ScreenHeader, Logo } from '../components/Shell'
 import { Button, EmptyState, Input, Sheet } from '../components/ui'
 import { CATEGORIES, categoryColor } from '../lib/constants'
-import { formatCents, parseAmountToCents } from '../lib/money'
+import {
+  equalShares, partsFromShares, sharesFromParts, sharesFromPercents, type Parts,
+} from '../lib/balance'
+import { memberIdsOf, memberLabel } from '../lib/members'
+import { rememberedCategory, suggestDescriptions } from '../lib/suggestions'
+import { CURRENCIES, currencySymbol } from '../lib/currency'
+import { formatMoney, parseAmountToCents } from '../lib/money'
 import { formatShortDate, monthLabel, todayISO } from '../lib/date'
 
+function toPercentInputs(shares: Record<string, number>): Record<string, string> {
+  return Object.fromEntries(Object.entries(shares).map(([id, bps]) => [id, String(bps / 100)]))
+}
+
 export function ExpensesScreen() {
-  const { expenses, totalCents, totals, month, shiftMonth, addExpense, deleteExpense, household, busy } = useApp()
+  const {
+    expenses, allExpenses, totalCents, month, shiftMonth, addExpense, updateExpense, deleteExpense,
+    household, householdMembers, user, busy, baseCurrency,
+  } = useApp()
   const [open, setOpen] = useState(false)
   const [description, setDescription] = useState('')
   const [amount, setAmount] = useState('')
+  const [currency, setCurrency] = useState<CurrencyCode>('EUR')
+  const [baseAmount, setBaseAmount] = useState('')
   const [category, setCategory] = useState<string>(CATEGORIES[0])
   const [spentOn, setSpentOn] = useState(todayISO())
   const [note, setNote] = useState('')
+  const [payerId, setPayerId] = useState('')
+  const [percents, setPercents] = useState<Record<string, string>>({})
+  const [parts, setParts] = useState<Parts>({})
+  const [splitMode, setSplitMode] = useState<'percent' | 'parts'>('percent')
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [error, setError] = useState('')
 
-  function close() {
-    setOpen(false)
+  const memberIds = memberIdsOf(householdMembers, user)
+  const editing = editingId ? allExpenses.find((item) => item.id === editingId) : undefined
+  const editorIds = [...new Set([
+    ...memberIds,
+    ...(editing ? [editing.paidBy, ...Object.keys(editing.shares)] : []),
+  ])]
+  const label = (id: string) => memberLabel(id, householdMembers, user?.id)
+  const suggestions = suggestDescriptions(allExpenses, description)
+  const partsPreview = splitMode === 'parts' ? sharesFromParts(parts) : null
+
+
+  function changeDescription(value: string) {
+    setDescription(value)
+    const remembered = rememberedCategory(allExpenses, value)
+    if (remembered) setCategory(remembered)
+  }
+
+  function pickSuggestion(suggestion: { description: string; category: string }) {
+    setDescription(suggestion.description)
+    setCategory(suggestion.category)
+  }
+
+  function currentShares() {
+    return splitMode === 'percent' ? sharesFromPercents(percents) : sharesFromParts(parts)
+  }
+
+  function changeSplitMode(mode: 'percent' | 'parts') {
+    const shares = currentShares() ?? equalShares(memberIds)
+    if (mode === 'parts') setParts(partsFromShares(shares))
+    else setPercents(toPercentInputs(shares))
+    setSplitMode(mode)
+  }
+
+  function resetForm() {
     setDescription('')
     setAmount('')
+    setCurrency(baseCurrency)
+    setBaseAmount('')
     setCategory(CATEGORIES[0])
     setSpentOn(todayISO())
     setNote('')
     setError('')
+    setPayerId(user?.id ?? memberIds[0] ?? '')
+    const even = equalShares(memberIds)
+    setPercents(toPercentInputs(even))
+    setParts(partsFromShares(even))
+    setSplitMode('percent')
+  }
+
+  function openForm(expense?: Expense) {
+    resetForm()
+    if (expense) {
+      setEditingId(expense.id)
+      setDescription(expense.description)
+      setAmount(String(expense.amountCents / 100).replace('.', ','))
+      setCurrency(expense.currency)
+      setBaseAmount(expense.currency === baseCurrency ? '' : String(expense.baseAmountCents / 100).replace('.', ','))
+      setCategory(expense.category)
+      setSpentOn(expense.spentOn)
+      setNote(expense.note)
+      setPayerId(expense.paidBy)
+      setPercents(toPercentInputs(expense.shares))
+      setParts(partsFromShares(expense.shares))
+    } else {
+      setEditingId(null)
+    }
+    setOpen(true)
+  }
+
+  function close() {
+    setOpen(false)
+    setError('')
+    setEditingId(null)
   }
 
   async function submit(event: FormEvent) {
@@ -34,8 +120,31 @@ export function ExpensesScreen() {
     const cents = parseAmountToCents(amount)
     if (!description.trim()) { setError('Poné una descripción.'); return }
     if (cents === null) { setError('Poné un monto válido (ej. 1250,50).'); return }
-    await addExpense(description, cents, category, spentOn, note.trim())
-    close()
+    const converted = currency === baseCurrency ? cents : parseAmountToCents(baseAmount)
+    if (converted === null) { setError(`Poné el equivalente en ${baseCurrency}.`); return }
+    if (!payerId) { setError('Elegí quién pagó.'); return }
+    const shares = currentShares()
+    if (!shares) {
+      setError(splitMode === 'percent'
+        ? 'El reparto tiene que sumar exactamente 100 %.'
+        : 'Poné al menos una parte entera y mayor que cero.')
+      return
+    }
+    const input = {
+      description,
+      amountCents: cents,
+      category,
+      spentOn,
+      note: note.trim(),
+      paidBy: payerId,
+      shares,
+      currency,
+      baseAmountCents: converted,
+    }
+    if (editingId) await updateExpense(editingId, input)
+    else await addExpense(input)
+    setOpen(false)
+    setEditingId(null)
   }
 
   return (
@@ -73,24 +182,12 @@ export function ExpensesScreen() {
       <div className="card mt-3 p-4">
         <p className="text-[10.5px] font-bold uppercase tracking-[0.15em] text-muted">Total del mes</p>
         <p className="mt-1 font-display text-[30px] font-semibold leading-none text-ink">
-          {formatCents(totalCents)}
+          {formatMoney(totalCents, baseCurrency)}
         </p>
-        {totals.length > 0 && (
-          <div className="mt-3 flex flex-wrap gap-1.5">
-            {totals.map((item) => (
-              <span
-                key={item.category}
-                className="rounded-full px-2 py-1 text-[10.5px] font-semibold"
-                style={{ backgroundColor: `color-mix(in srgb, ${categoryColor(item.category)} 14%, transparent)`, color: categoryColor(item.category) }}
-              >
-                {item.category} · {formatCents(item.cents)}
-              </span>
-            ))}
-          </div>
-        )}
+
       </div>
 
-      <Button className="mt-3 w-full" onClick={() => setOpen(true)}>
+      <Button className="mt-3 w-full" onClick={() => openForm()}>
         <Plus className="size-4" />
         Agregar gasto
       </Button>
@@ -102,7 +199,7 @@ export function ExpensesScreen() {
             title="Todavía no hay gastos"
             description="Sumá el primero y vas a ver el total del mes al instante."
             action={
-              <Button size="sm" onClick={() => setOpen(true)}>
+              <Button size="sm" onClick={() => openForm()}>
                 <Plus className="size-3.5" /> Agregar gasto
               </Button>
             }
@@ -112,20 +209,32 @@ export function ExpensesScreen() {
         <div className="card mt-4 divide-y divide-line overflow-hidden">
           {expenses.map((expense) => (
             <div key={expense.id} className="flex items-center gap-3 px-4 py-3">
-              <span
-                className="size-2 shrink-0 rounded-full"
-                style={{ backgroundColor: categoryColor(expense.category) }}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[13.5px] font-semibold text-ink">{expense.description}</p>
-                <p className="mt-0.5 text-[10.5px] text-muted">
-                  {formatShortDate(expense.spentOn)} · {expense.category}
-                  {expense.note ? ` · ${expense.note}` : ''}
-                </p>
-              </div>
-              <span className="shrink-0 text-[13.5px] font-semibold tabular-nums text-ink">
-                {formatCents(expense.amountCents)}
-              </span>
+              <button
+                type="button"
+                onClick={() => openForm(expense)}
+                aria-label={`Editar ${expense.description}`}
+                className="flex min-w-0 flex-1 items-center gap-3 text-left"
+              >
+                <span
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ backgroundColor: categoryColor(expense.category) }}
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13.5px] font-semibold text-ink">{expense.description}</p>
+                  <p className="mt-0.5 text-[10.5px] text-muted">
+                    {formatShortDate(expense.spentOn)} · {expense.category} · pagó {label(expense.paidBy)}
+                    {expense.note ? ` · ${expense.note}` : ''}
+                  </p>
+                </div>
+                <span className="shrink-0 text-right text-[13.5px] font-semibold tabular-nums text-ink">
+                  {formatMoney(expense.amountCents, expense.currency)}
+                  {expense.currency !== baseCurrency && (
+                    <span className="block text-[10.5px] font-normal text-muted">
+                      ≈ {formatMoney(expense.baseAmountCents, baseCurrency)}
+                    </span>
+                  )}
+                </span>
+              </button>
               <button
                 onClick={() => void deleteExpense(expense.id)}
                 className="grid size-8 shrink-0 place-items-center rounded-lg text-muted transition hover:bg-danger-soft hover:text-danger-ink"
@@ -142,12 +251,14 @@ export function ExpensesScreen() {
       <Sheet
         open={open}
         onClose={close}
-        title="Nuevo gasto"
+        title={editingId ? 'Editar gasto' : 'Nuevo gasto'}
         subtitle="Se comparte con todo tu hogar"
         footer={
           <div className="flex gap-2">
             <Button variant="secondary" className="flex-1" onClick={close}>Cancelar</Button>
-            <Button type="submit" form="gasto-form" className="flex-1">Guardar</Button>
+            <Button type="submit" form="gasto-form" className="flex-1">
+              {editingId ? 'Guardar cambios' : 'Guardar'}
+            </Button>
           </div>
         }
       >
@@ -156,20 +267,67 @@ export function ExpensesScreen() {
             <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Descripción</span>
             <Input
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={(event) => changeDescription(event.target.value)}
               placeholder="Ej.: Verdulería"
               autoFocus
+              autoComplete="off"
             />
           </label>
-          <label className="block">
-            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Monto</span>
-            <Input
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="1250,50"
-              inputMode="decimal"
-            />
-          </label>
+          {suggestions.length > 0 && (
+            <div className="-mt-1 flex flex-wrap gap-1.5" aria-label="Sugerencias">
+              {suggestions.map((suggestion) => (
+                <button
+                  key={suggestion.description}
+                  type="button"
+                  onClick={() => pickSuggestion(suggestion)}
+                  className="rounded-full border border-line bg-field px-2.5 py-1 text-[11.5px] font-medium text-ink transition hover:border-brand hover:text-brand"
+                >
+                  {suggestion.description}
+                  <span className="ml-1.5 text-muted">{suggestion.category}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-[1fr_7rem] gap-2">
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Monto</span>
+              <Input
+                value={amount}
+                onChange={(event) => setAmount(event.target.value)}
+                placeholder="1250,50"
+                inputMode="decimal"
+                aria-label="Monto"
+              />
+            </label>
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Moneda</span>
+              <select
+                value={currency}
+                onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
+                className="w-full rounded-lg border border-line bg-field px-2 py-2 text-[13px] text-ink focus:border-brand focus:outline-none"
+                aria-label="Moneda"
+              >
+                {CURRENCIES.map((item) => <option key={item.code} value={item.code}>{item.symbol} {item.code}</option>)}
+              </select>
+            </label>
+          </div>
+          {currency !== baseCurrency && (
+            <label className="block">
+              <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+                Equivalente en {baseCurrency} ({currencySymbol(baseCurrency)})
+              </span>
+              <Input
+                value={baseAmount}
+                onChange={(event) => setBaseAmount(event.target.value)}
+                placeholder="1250,50"
+                inputMode="decimal"
+                aria-label={`Equivalente en ${baseCurrency}`}
+              />
+              <span className="mt-1 block text-[10.5px] text-muted">
+                Los totales y el saldo se calculan con este valor.
+              </span>
+            </label>
+          )}
           <div className="grid grid-cols-2 gap-2">
             <label className="block">
               <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Rubro</span>
@@ -188,8 +346,77 @@ export function ExpensesScreen() {
             </label>
           </div>
           <label className="block">
+            <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Pagó</span>
+            <select
+              value={payerId}
+              onChange={(event) => setPayerId(event.target.value)}
+              className="w-full rounded-lg border border-line bg-field px-3 py-2 text-[13px] text-ink focus:border-brand focus:outline-none"
+              aria-label="Pagó"
+            >
+              {editorIds.map((id) => <option key={id} value={id}>{label(id)}</option>)}
+            </select>
+          </label>
+          <div>
+            <div className="mb-1.5 flex items-center justify-between">
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-muted">Reparto</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const even = equalShares(memberIds)
+                  setPercents(toPercentInputs(even))
+                  setParts(partsFromShares(even))
+                }}
+                className="text-[11px] font-semibold text-brand hover:underline"
+              >
+                Repartir por igual
+              </button>
+            </div>
+            <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-field p-1">
+              {(['percent', 'parts'] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => changeSplitMode(mode)}
+                  aria-pressed={splitMode === mode}
+                  className={`rounded-md py-1.5 text-[11.5px] font-semibold transition ${
+                    splitMode === mode ? 'bg-surface text-brand shadow-sm' : 'text-muted hover:text-ink'
+                  }`}
+                >
+                  {mode === 'percent' ? 'Por porcentaje' : 'Por partes'}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              {editorIds.map((id) => (
+                <div key={id} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{label(id)}</span>
+                  <Input
+                    value={splitMode === 'percent' ? percents[id] ?? '' : String(parts[id] ?? '')}
+                    onChange={(event) => {
+                      const value = event.target.value
+                      if (splitMode === 'percent') {
+                        setPercents((prev) => ({ ...prev, [id]: value }))
+                      } else {
+                        setParts((prev) => ({ ...prev, [id]: value === '' ? 0 : Number(value) }))
+                      }
+                    }}
+                    inputMode={splitMode === 'percent' ? 'decimal' : 'numeric'}
+                    className="w-24 text-right"
+                    aria-label={splitMode === 'percent' ? `Porcentaje de ${label(id)}` : `Partes de ${label(id)}`}
+                  />
+                  <span className="w-8 text-[13px] text-muted">{splitMode === 'percent' ? '%' : 'ptas.'}</span>
+                </div>
+              ))}
+            </div>
+            {partsPreview && (
+              <p className="mt-2 text-[10.5px] text-muted">
+                Equivale a {editorIds.map((id) => `${(partsPreview[id] ?? 0) / 100} %`).join(' / ')}
+              </p>
+            )}
+          </div>
+          <label className="block">
             <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Nota (opcional)</span>
-            <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ej.: pagó ella" />
+            <Input value={note} onChange={(event) => setNote(event.target.value)} placeholder="Ej.: con descuento" />
           </label>
           {error && <p className="text-[12px] font-medium text-danger-ink">{error}</p>}
         </form>

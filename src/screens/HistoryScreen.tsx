@@ -5,10 +5,11 @@ import { useApp } from '../state/AppContext'
 import { ScreenHeader } from '../components/Shell'
 import { Button, EmptyState } from '../components/ui'
 import { monthKey, monthLabel } from '../lib/date'
+import { baseAmountOf } from '../lib/currency'
 import { formatCents } from '../lib/money'
 
 export function HistoryScreen() {
-  const { allExpenses, goToMonth } = useApp()
+  const { allExpenses, goToMonth, baseCurrency } = useApp()
   const navigate = useNavigate()
 
   const months = useMemo(() => {
@@ -17,7 +18,7 @@ export function HistoryScreen() {
       const key = monthKey(expense.spentOn)
       const row = map.get(key) ?? { count: 0, cents: 0 }
       row.count += 1
-      row.cents += expense.amountCents
+      row.cents += baseAmountOf(expense)
       map.set(key, row)
     }
     return [...map.entries()]
@@ -59,10 +60,10 @@ export function HistoryScreen() {
                   {monthLabel(row.key)}
                 </p>
                 <p className="mt-0.5 text-[11.5px] text-muted">
-                  {row.count} gasto{row.count === 1 ? '' : 's'} · total {formatCents(row.cents)}
+                  {row.count} gasto{row.count === 1 ? '' : 's'} · total {formatCents(row.cents, baseCurrency)}
                 </p>
               </div>
-              <span className="text-[14px] font-semibold tabular-nums text-ink">{formatCents(row.cents)}</span>
+              <span className="text-[14px] font-semibold tabular-nums text-ink">{formatCents(row.cents, baseCurrency)}</span>
               <ChevronRight className="size-4 shrink-0 text-muted" />
             </button>
           ))}

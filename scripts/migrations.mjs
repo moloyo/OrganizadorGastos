@@ -32,7 +32,7 @@ export function validateMigrations(migrations) {
  */
 export function baselineCommand(migrations) {
   const versions = migrations.map((item) => item.version).join(' ')
-  return `supabase migration repair ${versions} --status applied --remote`
+  return `supabase migration repair ${versions} --status applied --linked`
 }
 
 function main() {

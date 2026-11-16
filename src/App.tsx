@@ -8,6 +8,8 @@ import { AuthScreen } from './screens/AuthScreen'
 import { ResetPasswordScreen } from './screens/ResetPasswordScreen'
 import { InviteScreen } from './screens/InviteScreen'
 import { ExpensesScreen } from './screens/ExpensesScreen'
+import { SaldoScreen } from './screens/SaldoScreen'
+import { CategoriesScreen } from './screens/CategoriesScreen'
 import { HistoryScreen } from './screens/HistoryScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { clearRecovery, recoveryPending } from './lib/recovery'
@@ -95,6 +97,8 @@ function Gate() {
         <Routes>
           <Route path="/" element={<ExpensesScreen />} />
           <Route path="/gastos" element={<Navigate to="/" replace />} />
+          <Route path="/saldo" element={<SaldoScreen />} />
+          <Route path="/rubros" element={<CategoriesScreen />} />
           <Route path="/historial" element={<HistoryScreen />} />
           <Route path="/ajustes" element={<SettingsScreen />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
-import { CloudUpload, RefreshCw, Wallet, WifiOff, Settings, History } from 'lucide-react'
+import { CloudUpload, PieChart, RefreshCw, Scale, Wallet, WifiOff, Settings, History } from 'lucide-react'
 import clsx from 'clsx'
 import { useApp } from '../state/AppContext'
 
@@ -48,6 +48,8 @@ export function ScreenHeader({
 
 const TABS = [
   { to: '/', label: 'Gastos', icon: Wallet, end: true },
+  { to: '/saldo', label: 'Saldo', icon: Scale },
+  { to: '/rubros', label: 'Rubros', icon: PieChart },
   { to: '/historial', label: 'Historial', icon: History },
   { to: '/ajustes', label: 'Ajustes', icon: Settings },
 ]

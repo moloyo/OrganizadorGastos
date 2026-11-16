@@ -51,7 +51,7 @@ Contexto: [README.md](../README.md) · [DESARROLLO.md](DESARROLLO.md) · [ESTADO
 **Problema que resuelve.** Que el schema sea reproducible y que una base ya migrada a mano no vuelva a ejecutar el `CREATE` inicial.
 
 **Cómo se implementa acá.** Migración única `supabase/migrations/20261116000000_schema.sql`; `supabase/config.toml` fija `project_id = "organizador-gastos"` y `major_version = 15`; `supabase/migrations/README.md` documenta el flujo. Comandos: `npm run db:status`, `npm run db:dry`, `npm run db:push`, `npm run db:migrations`, `npx supabase login`, `npx supabase link --project-ref <ref>`, `npx supabase migration new <nombre>`. Para bases ya migradas a mano, el baseline es un comando completo:
-`npx supabase migration repair 20261116000000 --status applied --remote` (lo imprime
+`npx supabase migration repair 20261116000000 --status applied --linked` (lo imprime
 `npm run db:migrations`). Marca la migración como aplicada sin ejecutarla.
 
 **Lección aprendida.** **No corras `npm run db:push` sobre una base que ya tiene el schema a mano** sin antes marcar el baseline: te va a saltar `relation already exists` / migraciones pendientes en una base que ya está bien. Y siempre `npm run db:dry` antes de `npm run db:push`. El `project_ref` real no se versiona: se vincula una sola vez por máquina con `npx supabase link --project-ref <ref>`.

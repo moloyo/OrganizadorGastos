@@ -1,4 +1,6 @@
+import { isCurrency, withCurrencyDefaults } from '../currency'
 import type {
+  CurrencyCode,
   DataAdapter,
   Expense,
   Household,
@@ -21,6 +23,7 @@ const LOCAL_USER: SessionUser = {
 interface LocalDB {
   expenses: Expense[]
   householdName: string
+  baseCurrency: CurrencyCode
 }
 
 const SEED_EXPENSES: Expense[] = [
@@ -31,6 +34,10 @@ const SEED_EXPENSES: Expense[] = [
     category: 'Alimentación',
     spentOn: '2026-11-14',
     note: '',
+    paidBy: LOCAL_USER.id,
+    shares: { [LOCAL_USER.id]: 10000 },
+    currency: 'EUR',
+    baseAmountCents: 18500,
     createdAt: '2026-11-14T10:00:00.000Z',
   },
   {
@@ -40,6 +47,10 @@ const SEED_EXPENSES: Expense[] = [
     category: 'Transporte',
     spentOn: '2026-11-13',
     note: 'Carga de SUBE',
+    paidBy: LOCAL_USER.id,
+    shares: { [LOCAL_USER.id]: 10000 },
+    currency: 'EUR',
+    baseAmountCents: 75700,
     createdAt: '2026-11-13T10:00:00.000Z',
   },
   {
@@ -49,16 +60,32 @@ const SEED_EXPENSES: Expense[] = [
     category: 'Salud',
     spentOn: '2026-11-10',
     note: '',
+    paidBy: LOCAL_USER.id,
+    shares: { [LOCAL_USER.id]: 10000 },
+    currency: 'EUR',
+    baseAmountCents: 12300,
     createdAt: '2026-11-10T10:00:00.000Z',
   },
 ]
+
+/** Los datos guardados antes de tener pagador/reparto/moneda se completan al leerlos. */
+function withPayerAndShares(expense: Expense, base: CurrencyCode): Expense {
+  return withCurrencyDefaults({
+    ...expense,
+    paidBy: expense.paidBy ?? LOCAL_USER.id,
+    shares: expense.shares ?? { [LOCAL_USER.id]: 10000 },
+  }, base)
+}
 
 function read(): LocalDB {
   try {
     const raw = localStorage.getItem(DB_KEY)
     if (raw) {
       const parsed = JSON.parse(raw) as LocalDB
-      if (parsed && Array.isArray(parsed.expenses)) return parsed
+      if (parsed && Array.isArray(parsed.expenses)) {
+        const base = isCurrency(parsed.baseCurrency) ? parsed.baseCurrency : 'EUR'
+        return { ...parsed, baseCurrency: base, expenses: parsed.expenses.map((expense) => withPayerAndShares(expense, base)) }
+      }
     }
   } catch {
     // datos corruptos: arrancamos de cero
@@ -66,6 +93,7 @@ function read(): LocalDB {
   const fresh: LocalDB = {
     expenses: SEED_EXPENSES.map((expense) => ({ ...expense })),
     householdName: 'Hogar de prueba',
+    baseCurrency: 'EUR',
   }
   write(fresh)
   return fresh
@@ -84,6 +112,7 @@ const household: Household = {
   name: 'Hogar de prueba',
   role: 'owner',
   memberCount: 1,
+  baseCurrency: 'EUR',
 }
 
 const members: HouseholdMember[] = [
@@ -130,11 +159,17 @@ export function createLocalAdapter(): DataAdapter {
     },
 
     async getHousehold() {
-      return { ...household, name: read().householdName }
+      const db = read()
+      return { ...household, name: db.householdName, baseCurrency: db.baseCurrency }
     },
     async renameHousehold(name) {
       const db = read()
       db.householdName = name
+      write(db)
+    },
+    async setHouseholdBaseCurrency(code) {
+      const db = read()
+      db.baseCurrency = code
       write(db)
     },
     async listHouseholdMembers() {
@@ -153,7 +188,8 @@ export function createLocalAdapter(): DataAdapter {
       return null
     },
     async joinHousehold(): Promise<Household> {
-      return { ...household, name: read().householdName }
+      const db = read()
+      return { ...household, name: db.householdName, baseCurrency: db.baseCurrency }
     },
     async leaveHousehold() {
       throw new Error('Los hogares solo existen en la nube.')
@@ -190,10 +226,16 @@ export function createLocalAdapter(): DataAdapter {
       }
     },
     async importAll(snapshot) {
-      write({ expenses: snapshot.expenses, householdName: read().householdName })
+      const db = read()
+      write({
+        expenses: snapshot.expenses.map((expense) => withPayerAndShares(expense, db.baseCurrency)),
+        householdName: db.householdName,
+        baseCurrency: db.baseCurrency,
+      })
     },
     async wipe() {
-      write({ expenses: [], householdName: read().householdName })
+      const db = read()
+      write({ expenses: [], householdName: db.householdName, baseCurrency: db.baseCurrency })
     },
   }
 }

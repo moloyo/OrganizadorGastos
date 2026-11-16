@@ -10,6 +10,7 @@ import type {
   Snapshot,
 } from '../../types'
 import { isUuid, newUuid } from '../uuid'
+import { isCurrency, withCurrencyDefaults } from '../currency'
 import { isOwnBroadcast } from '../realtime'
 import { isOfflineError } from './offline'
 
@@ -21,6 +22,10 @@ interface ExpenseRow {
   category: string
   spent_on: string
   note: string | null
+  paid_by: string
+  shares: Record<string, number>
+  currency: string
+  base_amount_cents: number
   created_at: string
 }
 
@@ -29,6 +34,7 @@ interface HouseholdRow {
   name: string
   role: 'owner' | 'member'
   member_count: number | string
+  base_currency: string
 }
 
 interface MemberRow {
@@ -97,15 +103,19 @@ function toUser(
 }
 
 function mapExpense(row: ExpenseRow): Expense {
-  return {
+  return withCurrencyDefaults({
     id: row.id,
     description: row.description,
     amountCents: row.amount_cents,
     category: row.category,
     spentOn: row.spent_on,
     note: row.note ?? '',
+    paidBy: row.paid_by,
+    shares: row.shares,
+    currency: isCurrency(row.currency) ? row.currency : 'EUR',
+    baseAmountCents: row.base_amount_cents,
     createdAt: row.created_at,
-  }
+  })
 }
 
 function toExpenseRow(expense: Expense, householdId: string): ExpenseRow {
@@ -117,6 +127,10 @@ function toExpenseRow(expense: Expense, householdId: string): ExpenseRow {
     category: expense.category,
     spent_on: expense.spentOn,
     note: expense.note,
+    paid_by: expense.paidBy,
+    shares: expense.shares,
+    currency: expense.currency,
+    base_amount_cents: expense.baseAmountCents,
     created_at: expense.createdAt,
   }
 }
@@ -229,6 +243,7 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
       name: row.name,
       role: row.role,
       memberCount: Number(row.member_count ?? 0),
+      baseCurrency: isCurrency(row.base_currency) ? row.base_currency : 'EUR',
     }
   }
 
@@ -345,6 +360,11 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
 
     async renameHousehold(name) {
       await rpc('household_rename', { p_name: name.trim() })
+    },
+
+    async setHouseholdBaseCurrency(code) {
+      await rpc('household_set_base_currency', { p_currency: code })
+      await getHousehold()
     },
 
     async listHouseholdMembers() {
@@ -465,7 +485,7 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
       if (removal) throw new Error(removal.message)
       if (snapshot.expenses.length === 0) return
       const rows = snapshot.expenses.map((expense) =>
-        toExpenseRow({ ...expense, id: isUuid(expense.id) ? expense.id : newUuid() }, householdId),
+        toExpenseRow(withCurrencyDefaults({ ...expense, id: isUuid(expense.id) ? expense.id : newUuid() }), householdId),
       )
       const { error } = await client.from('expenses').insert(rows)
       if (error) throw new Error(error.message)
@@ -478,7 +498,7 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
 
   // Después de CUALQUIER escritura exitosa avisamos al hogar.
   const WRITES = [
-    'deleteAccount', 'renameHousehold', 'createHouseholdInvite',
+    'deleteAccount', 'renameHousehold', 'setHouseholdBaseCurrency', 'createHouseholdInvite',
     'revokeHouseholdInvite', 'joinHousehold', 'leaveHousehold',
     'saveExpense', 'deleteExpense', 'clearExpenses', 'importAll', 'wipe',
   ] as const

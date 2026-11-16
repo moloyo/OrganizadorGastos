@@ -6,9 +6,13 @@ import {
 describe('migraciones versionadas', () => {
   it('la migración del repo tiene nombre válido', () => {
     const migrations = listMigrations()
-    expect(migrations.length).toBe(1)
-    expect(migrations[0].version).toBe('20261116000000')
-    expect(validateMigrations(migrations)).toMatchObject({ ok: true, count: 1 })
+    expect(migrations.length).toBe(3)
+    expect(migrations.map((migration) => migration.version)).toEqual([
+      '20261116000000',
+      '20261116000100',
+      '20261116000200',
+    ])
+    expect(validateMigrations(migrations)).toMatchObject({ ok: true, count: 3 })
   })
 
   it('detecta timestamps duplicados', () => {
@@ -32,6 +36,6 @@ describe('migraciones versionadas', () => {
   it('el baseline marca la versión como aplicada', () => {
     expect(
       baselineCommand([{ version: '20261116000000', file: 'a.sql' }]),
-    ).toBe('supabase migration repair 20261116000000 --status applied --remote')
+    ).toBe('supabase migration repair 20261116000000 --status applied --linked')
   })
 })

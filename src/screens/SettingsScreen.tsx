@@ -9,7 +9,8 @@ import { Button, Input } from '../components/ui'
 import { canLeaveHousehold } from '../lib/household'
 import { buildInviteLink } from '../lib/invite'
 import { applyTheme, readTheme, storeTheme, THEMES, type ThemeId } from '../lib/theme'
-import type { Snapshot } from '../types'
+import { CURRENCIES } from '../lib/currency'
+import type { CurrencyCode, Snapshot } from '../types'
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -25,18 +26,22 @@ const THEME_ICONS = { clasico: Sun, cool: Waves, oscuro: Moon } as const
 export function SettingsScreen() {
   const {
     user, household, householdMembers, householdInvites, isCloud,
-    refreshHousehold, createInvite, revokeInvite, renameHousehold, leaveHousehold,
+    refreshHousehold, createInvite, revokeInvite, renameHousehold, setBaseCurrency, leaveHousehold,
     signOut, exportData, importData, wipeData, deleteAccount,
     toast, clearExpenses,
   } = useApp()
   const fileRef = useRef<HTMLInputElement>(null)
   const [theme, setTheme] = useState<ThemeId>(() => readTheme())
   const [editName, setEditName] = useState(household?.name ?? '')
+  const [editCurrency, setEditCurrency] = useState<CurrencyCode>(household?.baseCurrency ?? 'EUR')
   const [newLink, setNewLink] = useState<string | null>(null)
   const [newToken, setNewToken] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
-  useEffect(() => { setEditName(household?.name ?? '') }, [household?.id, household?.name])
+  useEffect(() => {
+    setEditName(household?.name ?? '')
+    setEditCurrency(household?.baseCurrency ?? 'EUR')
+  }, [household?.id, household?.name, household?.baseCurrency])
 
   const activeInvites = householdInvites.filter(
     (invite) => !invite.revokedAt && new Date(invite.expiresAt) > new Date(),
@@ -49,6 +54,13 @@ export function SettingsScreen() {
     setBusy('rename')
     try { await renameHousehold(name); toast('Nombre actualizado.', 'success') }
     catch (error) { toast(error instanceof Error ? error.message : 'No pudimos renombrar.', 'error') }
+    finally { setBusy(null) }
+  }
+
+  async function handleCurrency() {
+    setBusy('currency')
+    try { await setBaseCurrency(editCurrency); toast('Moneda base actualizada.', 'success') }
+    catch (error) { toast(error instanceof Error ? error.message : 'No pudimos cambiar la moneda.', 'error') }
     finally { setBusy(null) }
   }
 
@@ -202,6 +214,25 @@ export function SettingsScreen() {
                 <Button size="sm" variant="secondary" onClick={() => void handleRename()} disabled={busy === 'rename'}>
                   <Pencil className="size-3.5" /> Guardar
                 </Button>
+              </div>
+              <div className="mt-4 border-t border-line pt-4">
+                <p className="mb-1 text-[12px] font-semibold text-ink">Moneda base</p>
+                <p className="mb-2 text-[11px] leading-relaxed text-muted">
+                  Los totales y el saldo se muestran en esta moneda. Cada gasto guarda su equivalente.
+                </p>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={editCurrency}
+                    onChange={(event) => setEditCurrency(event.target.value as CurrencyCode)}
+                    className="min-w-0 flex-1 rounded-lg border border-line bg-field px-3 py-2 text-[13px] text-ink focus:border-brand focus:outline-none"
+                    aria-label="Moneda base"
+                  >
+                    {CURRENCIES.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+                  </select>
+                  <Button size="sm" variant="secondary" onClick={() => void handleCurrency()} disabled={busy === 'currency'}>
+                    Guardar
+                  </Button>
+                </div>
               </div>
             </div>
 

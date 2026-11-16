@@ -22,6 +22,8 @@ seguridad para reseteos locales, no una licencia para pisar historia.
 
 | Migración | Qué crea |
 | --- | --- |
+| `20261116000200_currency.sql` | Agrega `households.base_currency` (EUR por defecto) y, en `expenses`, `currency` y `base_amount_cents` (equivalente en la moneda base, usado por todas las métricas). Recrea `my_household` para devolver la moneda base y agrega el RPC `household_set_base_currency`. Los gastos existentes quedan en EUR con equivalente igual al monto original. |
+| `20261116000100_expense_payer_shares.sql` | Agrega a `expenses` las columnas `paid_by` (quién pagó) y `shares` (reparto en puntos básicos, suma 10000), con la función `shares_are_valid()` como check. Completa los gastos existentes: pagador = `created_by` o dueño del hogar, reparto 50/50. |
 | `20261116000000_schema.sql` | La extensión `pgcrypto`; las tablas `households`, `household_members`, `household_invites` y `expenses` con sus índices (incluido el único de `user_id`); RLS en las 4 tablas; el helper anti-recursión `is_household_member()`; las policies (escritura directa **sólo** en `expenses`); las 11 RPC (`ensure_household`, `my_household`, `household_members_list`, `household_invite_create`, `household_invite_list`, `household_invite_revoke`, `household_invite_info`, `household_join`, `household_leave`, `household_rename`, `delete_my_account`); y un bloque `DO` final que cuenta hogares/memberships/gastos y verifica que no haya gastos con `household_id IS NULL`. |
 
 Las tablas `households`, `household_members` y `household_invites` **no tienen
@@ -35,7 +37,7 @@ Según los scripts del `package.json` del proyecto:
 ```bash
 npx supabase login                        # autenticarse con la CLI (una vez)
 npx supabase link --project-ref <ref>     # vincular al proyecto remoto
-npm run db:status                         # migration list --remote: estado en el remoto
+npm run db:status                         # migration list --linked: estado en el remoto
 npm run db:dry                            # db push --dry-run: qué se aplicaría, sin aplicar
 npm run db:push                           # db push: aplica las pendientes al remoto
 npm run db:migrations                     # script propio: lista/valida las migraciones locales
@@ -64,7 +66,7 @@ Si en cambio estuvieras adoptando el CLI sobre un proyecto **ya migrado a mano**
 rompería. Para ese caso se "marca" la versión como ya aplicada en el remoto:
 
 ```bash
-npx supabase migration repair 20261116000000 --status applied --remote
+npx supabase migration repair 20261116000000 --status applied --linked
 ```
 
 (`--status` también acepta `reverted`, para deshacer el marcado si te

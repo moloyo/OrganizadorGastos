@@ -324,6 +324,7 @@ export function createOfflineAdapter(
 
     getHousehold: () => base.getHousehold(),
     renameHousehold: (name) => base.renameHousehold(name),
+    setHouseholdBaseCurrency: (code) => base.setHouseholdBaseCurrency(code),
     listHouseholdMembers: () => base.listHouseholdMembers(),
     createHouseholdInvite: () => base.createHouseholdInvite(),
     listHouseholdInvites: () => base.listHouseholdInvites(),

@@ -1,3 +1,5 @@
+export type CurrencyCode = 'EUR' | 'ARS' | 'USD'
+
 export interface Expense {
   id: string
   description: string
@@ -7,6 +9,14 @@ export interface Expense {
   /** ISO `yyyy-MM-dd` (día en que se hizo el gasto). */
   spentOn: string
   note: string
+  /** userId de quien pagó. Por defecto, quien cargó el gasto. */
+  paidBy: string
+  /** userId -> puntos básicos (10000 = 100 %). Suma siempre 10000. */
+  shares: Record<string, number>
+  /** Moneda en la que se pagó. */
+  currency: CurrencyCode
+  /** Equivalente en la moneda base del hogar; se usa para todos los totales. */
+  baseAmountCents: number
   createdAt: string
 }
 
@@ -24,6 +34,7 @@ export interface Household {
   name: string
   role: 'owner' | 'member'
   memberCount: number
+  baseCurrency: CurrencyCode
 }
 
 export interface HouseholdMember {
@@ -74,6 +85,7 @@ export interface OfflineSupport {
 export interface HouseholdAdapter {
   getHousehold(): Promise<Household | null>
   renameHousehold(name: string): Promise<void>
+  setHouseholdBaseCurrency(code: CurrencyCode): Promise<void>
   listHouseholdMembers(): Promise<HouseholdMember[]>
   createHouseholdInvite(): Promise<HouseholdInvite>
   listHouseholdInvites(): Promise<HouseholdInvite[]>

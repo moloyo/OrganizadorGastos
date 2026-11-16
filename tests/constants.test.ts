@@ -4,10 +4,10 @@ import {
 } from '../src/lib/constants'
 
 describe('rubros de gastos', () => {
-  it('son exactamente siete y empiezan por Alimentación', () => {
+  it('son exactamente diez y empiezan por Alimentación', () => {
     expect(CATEGORIES).toEqual([
       'Alimentación', 'Transporte', 'Hogar', 'Salud',
-      'Educación', 'Entretenimiento', 'Otros',
+      'Educación', 'Entretenimiento', 'Salidas', 'Vacaciones', 'Compras', 'Otros',
     ])
   })
 

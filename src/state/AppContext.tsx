@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import type {
+  CurrencyCode,
   DataAdapter,
   Expense,
   Household,
@@ -40,6 +41,8 @@ interface AppContextValue {
   retrySync: () => void
   user: SessionUser | null
   household: Household | null
+  baseCurrency: CurrencyCode
+  setBaseCurrency: (code: CurrencyCode) => Promise<void>
   householdMembers: HouseholdMember[]
   householdInvites: HouseholdInvite[]
   isCloud: boolean
@@ -53,13 +56,8 @@ interface AppContextValue {
   toasts: Toast[]
   toast: (message: string, tone?: ToastTone) => void
   dismissToast: (id: string) => void
-  addExpense: (
-    description: string,
-    amountCents: number,
-    category: string,
-    spentOn: string,
-    note?: string,
-  ) => Promise<void>
+  addExpense: (input: NewExpenseInput) => Promise<void>
+  updateExpense: (id: string, input: NewExpenseInput) => Promise<void>
   deleteExpense: (id: string) => Promise<void>
   clearExpenses: () => Promise<void>
   refreshHousehold: () => Promise<void>
@@ -78,6 +76,18 @@ interface AppContextValue {
   exportData: () => Promise<Snapshot>
   importData: (snapshot: Snapshot) => Promise<void>
   wipeData: () => Promise<void>
+}
+
+export interface NewExpenseInput {
+  description: string
+  amountCents: number
+  category: string
+  spentOn: string
+  note?: string
+  paidBy: string
+  shares: Expense['shares']
+  currency: CurrencyCode
+  baseAmountCents: number
 }
 
 const AppContext = createContext<AppContextValue | null>(null)
@@ -262,7 +272,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /* ------------------------------- Acciones ------------------------------- */
 
   const addExpense = useCallback(
-    async (description: string, amountCents: number, category: string, spentOn: string, note = '') => {
+    async ({ description, amountCents, category, spentOn, note = '', paidBy, shares, currency, baseAmountCents }: NewExpenseInput) => {
       const expense: Expense = {
         id: makeId(),
         description: description.trim(),
@@ -270,6 +280,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
         category,
         spentOn,
         note,
+        paidBy,
+        shares,
+        currency,
+        baseAmountCents,
         createdAt: new Date().toISOString(),
       }
       setExpenses((prev) => [expense, ...prev])
@@ -282,6 +296,35 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
     },
     [adapter, reloadAll, toast],
+  )
+
+  const updateExpense = useCallback(
+    async (id: string, input: NewExpenseInput) => {
+      const previous = expenses
+      const original = previous.find((item) => item.id === id)
+      const updated: Expense = {
+        ...(original ?? { id, createdAt: new Date().toISOString() }),
+        description: input.description.trim(),
+        amountCents: input.amountCents,
+        category: input.category,
+        spentOn: input.spentOn,
+        note: input.note ?? '',
+        paidBy: input.paidBy,
+        shares: input.shares,
+        currency: input.currency,
+        baseAmountCents: input.baseAmountCents,
+      }
+      setExpenses((prev) => prev.map((item) => (item.id === id ? updated : item)))
+      try {
+        await adapter.saveExpense(updated)
+        toast('Gasto actualizado.', 'success')
+      } catch (error) {
+        setExpenses(previous)
+        toast(error instanceof Error ? error.message : 'No pudimos actualizar el gasto.', 'error')
+        await reloadAll().catch(() => {})
+      }
+    },
+    [adapter, expenses, reloadAll, toast],
   )
 
   const deleteExpense = useCallback(
@@ -310,6 +353,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       toast(error instanceof Error ? error.message : 'No pudimos borrar los gastos.', 'error')
     }
   }, [adapter, expenses, toast])
+
+  const setBaseCurrency = useCallback(
+    async (code: CurrencyCode) => {
+      await adapter.setHouseholdBaseCurrency(code)
+      await refreshHousehold()
+    },
+    [adapter, refreshHousehold],
+  )
 
   const createInvite = useCallback(async () => {
     const invite = await adapter.createHouseholdInvite()
@@ -393,7 +444,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   const value: AppContextValue = {
     ready, loaded, busy, offlineStatus, retrySync,
-    user, household, householdMembers, householdInvites,
+    user, household,
+    baseCurrency: household?.baseCurrency ?? 'EUR',
+    setBaseCurrency,
+    householdMembers, householdInvites,
     isCloud: cloudConfigured,
     month,
     goToMonth: (key: string) => setMonth(key),
@@ -403,7 +457,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     totalCents,
     totals,
     toasts, toast, dismissToast,
-    addExpense, deleteExpense, clearExpenses,
+    addExpense, updateExpense, deleteExpense, clearExpenses,
     refreshHousehold, createInvite, revokeInvite, renameHousehold, leaveHousehold,
     joinHousehold, getInviteInfo,
     signIn, signUp, signOut, resetPassword, updatePassword, deleteAccount,
