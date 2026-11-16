@@ -6,6 +6,7 @@ import {
   isValidShares,
   monthOf,
   monthSummary,
+  overallSummary,
   partsFromShares,
   settle,
   sharesFromParts,
@@ -158,6 +159,25 @@ describe('moneda base', () => {
     const { balances } = computeBalances(expenses, [ANA, LUCAS])
     expect(balances).toEqual({ ana: 4000, lucas: -4000 })
     expect(monthSummary(expenses, '2026-11').totalCents).toBe(8000)
+  })
+})
+
+describe('saldo acumulado', () => {
+  it('netea deudas de meses distintos', () => {
+    const expenses = [
+      gasto(20000, ANA, { ana: 5000, lucas: 5000 }, '2026-10-10'),
+      gasto(10000, LUCAS, { ana: 5000, lucas: 5000 }, '2026-11-10'),
+    ]
+    const summary = overallSummary(expenses, [ANA, LUCAS])
+    expect(summary.totalCents).toBe(30000)
+    expect(summary.balances).toEqual({ ana: 5000, lucas: -5000 })
+    expect(summary.settlements).toEqual([{ from: LUCAS, to: ANA, cents: 5000 }])
+  })
+
+  it('un pago de cualquier mes descuenta del saldo acumulado', () => {
+    const expenses = [gasto(20000, ANA, { ana: 5000, lucas: 5000 }, '2026-10-10')]
+    const transfers = [{ from: LUCAS, to: ANA, baseAmountCents: 10000, paidOn: '2026-11-16' }]
+    expect(overallSummary(expenses, [ANA, LUCAS], transfers).balances).toEqual({ ana: 0, lucas: 0 })
   })
 })
 

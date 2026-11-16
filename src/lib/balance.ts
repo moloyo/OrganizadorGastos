@@ -250,6 +250,23 @@ export function splitByCategory(
   )
 }
 
+/** Saldo acumulado desde el principio: todos los gastos y todos los pagos. */
+export function overallSummary(
+  expenses: SharedExpense[],
+  memberIds: string[] = [],
+  transfers: SharedTransfer[] = [],
+): MonthSummary {
+  const { paidCents, owedCents, balances } = computeBalances(expenses, memberIds, transfers)
+  return {
+    month: '',
+    totalCents: expenses.reduce((total, expense) => total + expense.baseAmountCents, 0),
+    paidCents,
+    owedCents,
+    balances,
+    settlements: settle(balances),
+  }
+}
+
 /** Resumen de un mes: total, saldos y liquidación para dejar todo a mano. */
 export function monthSummary(
   expenses: SharedExpense[],

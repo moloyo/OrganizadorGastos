@@ -1,11 +1,11 @@
 import { expect, test } from '@playwright/test'
 
-test('la pestaña Saldo muestra el mes y que están a mano en modo local', async ({ page }) => {
+test('la pestaña Saldo muestra el saldo acumulado en modo local', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('link', { name: 'Saldo' }).click()
   await expect(page.getByRole('heading', { name: 'Saldo' })).toBeVisible()
   await expect(
-    page.getByText(/Están a mano: no hay nada que pagar este mes\.|Sin gastos en este mes/),
+    page.getByText(/Están a mano: no hay nada que pagar\.|Todavía no hay gastos/),
   ).toBeVisible()
 })
 
