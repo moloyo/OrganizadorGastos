@@ -36,6 +36,7 @@ export function ExpensesScreen() {
   const [payerId, setPayerId] = useState('')
   const [percents, setPercents] = useState<Record<string, string>>({})
   const [parts, setParts] = useState<Parts>({})
+  const [participants, setParticipants] = useState<Record<string, boolean>>({})
   const [splitMode, setSplitMode] = useState<'percent' | 'parts'>('percent')
   const [editingId, setEditingId] = useState<string | null>(null)
   const [recurrence, setRecurrence] = useState<Recurrence>('none')
@@ -49,8 +50,15 @@ export function ExpensesScreen() {
     ...(editing ? [editing.paidBy, ...Object.keys(editing.shares)] : []),
   ])]
   const label = (id: string) => memberLabel(id, householdMembers, user?.id)
+  const activeIds = editorIds.filter((id) => participants[id] !== false)
+  const effectivePercents = Object.fromEntries(
+    editorIds.map((id) => [id, participants[id] === false ? '0' : percents[id] ?? '']),
+  )
+  const effectiveParts: Parts = Object.fromEntries(
+    editorIds.map((id) => [id, participants[id] === false ? 0 : parts[id] ?? 0]),
+  )
   const suggestions = suggestDescriptions(allExpenses, description)
-  const partsPreview = splitMode === 'parts' ? sharesFromParts(parts) : null
+  const partsPreview = splitMode === 'parts' ? sharesFromParts(effectiveParts) : null
   const needle = query.trim().toLowerCase()
   const shown = needle
     ? allExpenses
@@ -72,7 +80,19 @@ export function ExpensesScreen() {
   }
 
   function currentShares() {
-    return splitMode === 'percent' ? sharesFromPercents(percents) : sharesFromParts(parts)
+    return splitMode === 'percent'
+      ? sharesFromPercents(effectivePercents)
+      : sharesFromParts(effectiveParts)
+  }
+
+  function toggleParticipant(id: string, participates: boolean) {
+    const next = { ...participants, [id]: participates }
+    setParticipants(next)
+    const remaining = editorIds.filter((item) => next[item] !== false)
+    const even = equalShares(remaining)
+    setPercents(toPercentInputs(even))
+    setParts(partsFromShares(even))
+    setError('')
   }
 
   function changeSplitMode(mode: 'percent' | 'parts') {
@@ -95,6 +115,7 @@ export function ExpensesScreen() {
     const even = equalShares(memberIds)
     setPercents(toPercentInputs(even))
     setParts(partsFromShares(even))
+    setParticipants(Object.fromEntries(memberIds.map((id) => [id, true])))
     setSplitMode('percent')
     setRecurrence('none')
   }
@@ -113,6 +134,9 @@ export function ExpensesScreen() {
       setPayerId(expense.paidBy)
       setPercents(toPercentInputs(expense.shares))
       setParts(partsFromShares(expense.shares))
+      setParticipants(Object.fromEntries(
+        editorIds.map((id) => [id, (expense.shares[id] ?? 0) > 0]),
+      ))
       setRecurrence(expense.recurrence ?? 'none')
     } else {
       setEditingId(null)
@@ -134,6 +158,7 @@ export function ExpensesScreen() {
     const converted = currency === baseCurrency ? cents : parseAmountToCents(baseAmount)
     if (converted === null) { setError(`Poné el equivalente en ${baseCurrency}.`); return }
     if (!payerId) { setError('Elegí quién pagó.'); return }
+    if (activeIds.length === 0) { setError('Elegí al menos una persona que participe.'); return }
     const shares = currentShares()
     if (!shares) {
       setError(splitMode === 'percent'
@@ -406,7 +431,7 @@ export function ExpensesScreen() {
               <button
                 type="button"
                 onClick={() => {
-                  const even = equalShares(memberIds)
+                  const even = equalShares(activeIds)
                   setPercents(toPercentInputs(even))
                   setParts(partsFromShares(even))
                 }}
@@ -433,8 +458,18 @@ export function ExpensesScreen() {
             <div className="space-y-2">
               {editorIds.map((id) => (
                 <div key={id} className="flex items-center gap-2">
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{label(id)}</span>
+                  <input
+                    type="checkbox"
+                    checked={participants[id] !== false}
+                    onChange={(event) => toggleParticipant(id, event.target.checked)}
+                    aria-label={`${label(id)} participa del gasto`}
+                    className="size-4 shrink-0 accent-[var(--color-brand)]"
+                  />
+                  <span className={`min-w-0 flex-1 truncate text-[13px] ${participants[id] === false ? 'text-muted line-through' : 'text-ink'}`}>
+                    {label(id)}
+                  </span>
                   <Input
+                    disabled={participants[id] === false}
                     value={splitMode === 'percent' ? percents[id] ?? '' : String(parts[id] ?? '')}
                     onChange={(event) => {
                       const value = event.target.value
@@ -454,7 +489,7 @@ export function ExpensesScreen() {
             </div>
             {partsPreview && (
               <p className="mt-2 text-[10.5px] text-muted">
-                Equivale a {editorIds.map((id) => `${(partsPreview[id] ?? 0) / 100} %`).join(' / ')}
+                Equivale a {activeIds.map((id) => `${(partsPreview[id] ?? 0) / 100} %`).join(' / ')}
               </p>
             )}
           </div>

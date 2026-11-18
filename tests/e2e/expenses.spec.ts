@@ -118,6 +118,20 @@ test('un viaje es un ámbito separado con su propia moneda', async ({ page }) =>
   await expect(page.getByText('Hotel')).toBeHidden()
 })
 
+test('se puede excluir a una persona del reparto', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Agregar gasto' }).first().click()
+  const dialog = page.getByRole('dialog')
+  const check = dialog.getByRole('checkbox', { name: /participa del gasto/ })
+  await expect(check).toBeChecked()
+  await check.uncheck()
+  await expect(dialog.getByLabel(/Porcentaje de/)).toBeDisabled()
+  await dialog.getByPlaceholder('Ej.: Verdulería').fill('Gasto sin participantes')
+  await dialog.getByLabel('Monto').fill('100')
+  await dialog.getByRole('button', { name: 'Guardar' }).click()
+  await expect(dialog.getByText(/Elegí al menos una persona/)).toBeVisible()
+})
+
 test('se agrega un gasto y persiste tras recargar', async ({ page }) => {
   await page.goto('/')
   await expect(page.getByRole('heading', { name: 'Gastos' })).toBeVisible()
