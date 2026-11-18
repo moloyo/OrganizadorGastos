@@ -465,24 +465,26 @@ export function ExpensesScreen() {
                     aria-label={`${label(id)} participa del gasto`}
                     className="size-4 shrink-0 accent-[var(--color-brand)]"
                   />
-                  <span className={`min-w-0 flex-1 truncate text-[13px] ${participants[id] === false ? 'text-muted line-through' : 'text-ink'}`}>
+                  <span className={`min-w-[4rem] flex-1 truncate text-[13px] ${participants[id] === false ? 'text-muted line-through' : 'text-ink'}`}>
                     {label(id)}
                   </span>
-                  <Input
-                    disabled={participants[id] === false}
-                    value={splitMode === 'percent' ? percents[id] ?? '' : String(parts[id] ?? '')}
-                    onChange={(event) => {
-                      const value = event.target.value
-                      if (splitMode === 'percent') {
-                        setPercents((prev) => ({ ...prev, [id]: value }))
-                      } else {
-                        setParts((prev) => ({ ...prev, [id]: value === '' ? 0 : Number(value) }))
-                      }
-                    }}
-                    inputMode={splitMode === 'percent' ? 'decimal' : 'numeric'}
-                    className="w-24 text-right"
-                    aria-label={splitMode === 'percent' ? `Porcentaje de ${label(id)}` : `Partes de ${label(id)}`}
-                  />
+                  <span className="w-24 shrink-0">
+                    <Input
+                      disabled={participants[id] === false}
+                      value={splitMode === 'percent' ? percents[id] ?? '' : String(parts[id] ?? '')}
+                      onChange={(event) => {
+                        const value = event.target.value
+                        if (splitMode === 'percent') {
+                          setPercents((prev) => ({ ...prev, [id]: value }))
+                        } else {
+                          setParts((prev) => ({ ...prev, [id]: value === '' ? 0 : Number(value) }))
+                        }
+                      }}
+                      inputMode={splitMode === 'percent' ? 'decimal' : 'numeric'}
+                      className="text-right"
+                      aria-label={splitMode === 'percent' ? `Porcentaje de ${label(id)}` : `Partes de ${label(id)}`}
+                    />
+                  </span>
                   <span className="w-8 text-[13px] text-muted">{splitMode === 'percent' ? '%' : 'ptas.'}</span>
                 </div>
               ))}

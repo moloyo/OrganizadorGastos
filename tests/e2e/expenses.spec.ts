@@ -122,6 +122,7 @@ test('se puede excluir a una persona del reparto', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Agregar gasto' }).first().click()
   const dialog = page.getByRole('dialog')
+  await expect(dialog.locator('span').filter({ hasText: /^Vos$/ })).toBeVisible()
   const check = dialog.getByRole('checkbox', { name: /participa del gasto/ })
   await expect(check).toBeChecked()
   await check.uncheck()
