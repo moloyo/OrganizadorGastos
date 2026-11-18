@@ -18,6 +18,7 @@ const DB_KEY = 'gastos:db:v1'
 const LOCAL_USER: SessionUser = {
   id: 'local',
   email: 'local@gastos.app',
+  name: 'Vos',
   householdId: 'hogar-local',
   householdName: 'Hogar de prueba',
 }
@@ -135,6 +136,7 @@ const members: HouseholdMember[] = [
   {
     userId: LOCAL_USER.id,
     email: LOCAL_USER.email,
+    name: 'Vos',
     role: 'owner',
     joinedAt: '2026-11-01T00:00:00.000Z',
   },
@@ -160,7 +162,7 @@ export function createLocalAdapter(): DataAdapter {
     async signIn() {
       throw new Error('Estás en modo local. Configurá Supabase para usar cuentas.')
     },
-    async signUp() {
+    async signUp(_email, _password, _name) {
       throw new Error('Estás en modo local. Configurá Supabase para usar cuentas.')
     },
     async signOut() {},
@@ -188,6 +190,7 @@ export function createLocalAdapter(): DataAdapter {
       db.baseCurrency = code
       write(db)
     },
+    async setDisplayName() {},
     async listHouseholdMembers() {
       return members
     },

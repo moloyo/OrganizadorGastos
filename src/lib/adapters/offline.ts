@@ -327,7 +327,7 @@ export function createOfflineAdapter(
     },
 
     signIn: (email, password) => base.signIn(email, password),
-    signUp: (email, password) => base.signUp(email, password),
+    signUp: (email, password, name) => base.signUp(email, password, name),
     async signOut() {
       if (scopeId && isOnline()) await flush()
       await base.signOut()
@@ -347,6 +347,7 @@ export function createOfflineAdapter(
     getHousehold: () => base.getHousehold(),
     renameHousehold: (name) => base.renameHousehold(name),
     setHouseholdBaseCurrency: (code) => base.setHouseholdBaseCurrency(code),
+    setDisplayName: (name) => base.setDisplayName(name),
     listHouseholdMembers: () => base.listHouseholdMembers(),
     createHouseholdInvite: () => base.createHouseholdInvite(),
     listHouseholdInvites: () => base.listHouseholdInvites(),

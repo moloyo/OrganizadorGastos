@@ -53,6 +53,8 @@ export interface Trip {
 export interface SessionUser {
   id: string
   email: string
+  /** Nombre elegido al registrarse. */
+  name?: string | null
   /** Hogar al que pertenece la sesión. Si falta, se usa el id de usuario. */
   householdId?: string | null
   householdName?: string | null
@@ -70,6 +72,8 @@ export interface Household {
 export interface HouseholdMember {
   userId: string
   email: string
+  /** Nombre visible para los demás miembros del hogar. */
+  name: string
   role: 'owner' | 'member'
   joinedAt: string
 }
@@ -116,6 +120,7 @@ export interface HouseholdAdapter {
   getHousehold(): Promise<Household | null>
   renameHousehold(name: string): Promise<void>
   setHouseholdBaseCurrency(code: CurrencyCode): Promise<void>
+  setDisplayName(name: string): Promise<void>
   listHouseholdMembers(): Promise<HouseholdMember[]>
   createHouseholdInvite(): Promise<HouseholdInvite>
   listHouseholdInvites(): Promise<HouseholdInvite[]>
@@ -134,7 +139,7 @@ export interface DataAdapter extends HouseholdAdapter {
   /** Señal de Realtime: quien la recibe debe releer del servidor. */
   subscribeToChanges(onChange: () => void): () => void
   signIn(email: string, password: string): Promise<void>
-  signUp(email: string, password: string): Promise<{ needsConfirmation: boolean }>
+  signUp(email: string, password: string, name: string): Promise<{ needsConfirmation: boolean }>
   signOut(): Promise<void>
   resetPassword(email: string): Promise<void>
   updatePassword(password: string): Promise<void>

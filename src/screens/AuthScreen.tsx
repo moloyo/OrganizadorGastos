@@ -8,6 +8,7 @@ import { Button, Input } from '../components/ui'
 export function AuthScreen({ invitePending = false }: { invitePending?: boolean }) {
   const { signIn, signUp, resetPassword } = useApp()
   const [mode, setMode] = useState<'in' | 'up' | 'forgot'>('in')
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -18,6 +19,7 @@ export function AuthScreen({ invitePending = false }: { invitePending?: boolean 
     event.preventDefault()
     setError('')
     setNotice('')
+    if (mode === 'up' && !name.trim()) { setError('Poné tu nombre.'); return }
     if (!email.trim()) { setError('Ingresá tu email.'); return }
     if (mode !== 'forgot' && password.length < 6) {
       setError('La contraseña necesita al menos 6 caracteres.')
@@ -33,7 +35,7 @@ export function AuthScreen({ invitePending = false }: { invitePending?: boolean 
       if (mode === 'in') {
         await signIn(email.trim(), password)
       } else {
-        const result = await signUp(email.trim(), password)
+        const result = await signUp(email.trim(), password, name.trim())
         if (result.needsConfirmation) {
           setNotice('Te mandamos un email para confirmar la cuenta. Confirmalo y después ingresá.')
           setMode('in')
@@ -101,6 +103,23 @@ export function AuthScreen({ invitePending = false }: { invitePending?: boolean 
           )}
 
           <form onSubmit={submit} className="space-y-3">
+            {mode === 'up' && (
+              <label className="block">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">
+                  Tu nombre
+                </span>
+                <Input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder="Ej.: Ana"
+                  autoComplete="given-name"
+                  maxLength={40}
+                />
+                <span className="mt-1 block text-[10.5px] text-muted">
+                  Así te va a ver tu pareja en los gastos.
+                </span>
+              </label>
+            )}
             <label className="block">
               <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">
                 Email

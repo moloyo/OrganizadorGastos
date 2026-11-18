@@ -68,6 +68,7 @@ interface HouseholdRow {
 interface MemberRow {
   user_id: string
   email: string | null
+  display_name: string | null
   role: 'owner' | 'member'
   joined_at: string
 }
@@ -125,6 +126,7 @@ function toUser(
   return {
     id: user.id,
     email: user.email ?? '',
+    name: (user.user_metadata?.display_name as string | undefined) ?? null,
     householdId: householdId ?? null,
     householdName: householdName ?? null,
   }
@@ -368,9 +370,11 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
       await resolveSession()
     },
 
-    async signUp(email, password) {
+    async signUp(email, password, name) {
       invalidateSession()
-      const { data, error } = await client.auth.signUp({ email, password })
+      const { data, error } = await client.auth.signUp({
+        email, password, options: { data: { display_name: name.trim() } },
+      })
       if (error) throw new Error(traducirAuthError(error.message))
       if (data.session) await resolveSession()
       return { needsConfirmation: !data.session }
@@ -427,11 +431,16 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
       await getHousehold()
     },
 
+    async setDisplayName(name) {
+      await rpc('household_set_display_name', { p_name: name.trim() })
+    },
+
     async listHouseholdMembers() {
       const data = await rpc<unknown>('household_members_list')
       return rpcRows<MemberRow>(data).map((row) => ({
         userId: row.user_id,
         email: row.email ?? '',
+        name: row.display_name?.trim() || row.email?.split('@')[0] || 'Otra persona',
         role: row.role,
         joinedAt: row.joined_at,
       }))
@@ -631,7 +640,7 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
 
   // Después de CUALQUIER escritura exitosa avisamos al hogar.
   const WRITES = [
-    'deleteAccount', 'renameHousehold', 'setHouseholdBaseCurrency', 'createHouseholdInvite',
+    'deleteAccount', 'renameHousehold', 'setHouseholdBaseCurrency', 'setDisplayName', 'createHouseholdInvite',
     'revokeHouseholdInvite', 'joinHousehold', 'leaveHousehold',
     'saveExpense', 'saveExpenses', 'deleteExpense', 'clearExpenses', 'importAll', 'wipe',
     'addTransfer', 'deleteTransfer', 'createTrip', 'deleteTrip',

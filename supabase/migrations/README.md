@@ -22,6 +22,7 @@ seguridad para reseteos locales, no una licencia para pisar historia.
 
 | Migración | Qué crea |
 | --- | --- |
+| `20261116000500_display_names.sql` | Agrega `household_members.display_name` (nombre visible), lo completa para los usuarios existentes desde el email, actualiza `ensure_household`, `household_join` y `household_members_list`, y crea el RPC `household_set_display_name`. |
 | `20261116000400_transfers_trips_recurrence.sql` | Crea `transfers` (pagos entre miembros que descuentan del saldo) y `trips` (bolsillos con moneda base propia); agrega a `expenses` los campos `trip_id`, `recurrence` y `recurrence_group_id`; RLS por membresía en las tablas nuevas. |
 | `20261116000300_fix_new_household.sql` | Corrige el error "No pertenecés a ningún hogar" en cuentas nuevas: `household_invite_create`, `household_invite_list`, `household_rename` y `household_set_base_currency` pasan a llamar a `ensure_household()` en vez de exigir una membresía ya existente. |
 | `20261116000200_currency.sql` | Agrega `households.base_currency` (EUR por defecto) y, en `expenses`, `currency` y `base_amount_cents` (equivalente en la moneda base, usado por todas las métricas). Recrea `my_household` para devolver la moneda base y agrega el RPC `household_set_base_currency`. Los gastos existentes quedan en EUR con equivalente igual al monto original. |

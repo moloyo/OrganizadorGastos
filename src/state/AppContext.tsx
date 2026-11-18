@@ -49,6 +49,7 @@ interface AppContextValue {
   household: Household | null
   baseCurrency: CurrencyCode
   setBaseCurrency: (code: CurrencyCode) => Promise<void>
+  setDisplayName: (name: string) => Promise<void>
   householdMembers: HouseholdMember[]
   householdInvites: HouseholdInvite[]
   trips: Trip[]
@@ -86,7 +87,7 @@ interface AppContextValue {
   joinHousehold: (token: string) => Promise<Household>
   getInviteInfo: (token: string) => Promise<InviteInfo | null>
   signIn: (email: string, password: string) => Promise<void>
-  signUp: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>
+  signUp: (email: string, password: string, name: string) => Promise<{ needsConfirmation: boolean }>
   signOut: () => Promise<void>
   resetPassword: (email: string) => Promise<void>
   updatePassword: (password: string) => Promise<void>
@@ -462,6 +463,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [adapter, transfers, toast],
   )
 
+  const setDisplayName = useCallback(
+    async (name: string) => {
+      await adapter.setDisplayName(name)
+      setUser((prev) => (prev ? { ...prev, name } : prev))
+      await refreshHousehold()
+    },
+    [adapter, refreshHousehold],
+  )
+
   const createTrip = useCallback(
     async (trip: Trip) => {
       await adapter.createTrip(trip)
@@ -573,7 +583,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   )
 
   const signIn = useCallback((email: string, password: string) => adapter.signIn(email, password), [adapter])
-  const signUp = useCallback((email: string, password: string) => adapter.signUp(email, password), [adapter])
+  const signUp = useCallback((email: string, password: string, name: string) => adapter.signUp(email, password, name), [adapter])
   const signOut = useCallback(async () => {
     await adapter.signOut()
     setUser(null)
@@ -609,7 +619,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ready, loaded, busy, offlineStatus, retrySync,
     user, household,
     baseCurrency,
-    setBaseCurrency,
+    setBaseCurrency, setDisplayName,
     householdMembers, householdInvites,
     trips, activeTripId, setActiveTrip: setActiveTripId,
     createTrip, deleteTrip,

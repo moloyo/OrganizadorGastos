@@ -6,15 +6,16 @@ import {
 describe('migraciones versionadas', () => {
   it('la migración del repo tiene nombre válido', () => {
     const migrations = listMigrations()
-    expect(migrations.length).toBe(5)
+    expect(migrations.length).toBe(6)
     expect(migrations.map((migration) => migration.version)).toEqual([
       '20261116000000',
       '20261116000100',
       '20261116000200',
       '20261116000300',
       '20261116000400',
+      '20261116000500',
     ])
-    expect(validateMigrations(migrations)).toMatchObject({ ok: true, count: 5 })
+    expect(validateMigrations(migrations)).toMatchObject({ ok: true, count: 6 })
   })
 
   it('detecta timestamps duplicados', () => {

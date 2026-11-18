@@ -118,6 +118,12 @@ test('un viaje es un ámbito separado con su propia moneda', async ({ page }) =>
   await expect(page.getByText('Hotel')).toBeHidden()
 })
 
+test('Ajustes permite cambiar el nombre visible', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Ajustes' }).click()
+  await expect(page.getByLabel('Tu nombre')).toHaveValue('Vos')
+})
+
 test('se puede excluir a una persona del reparto', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Agregar gasto' }).first().click()

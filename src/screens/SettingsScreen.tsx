@@ -29,7 +29,7 @@ const THEME_ICONS = { clasico: Sun, cool: Waves, oscuro: Moon } as const
 export function SettingsScreen() {
   const {
     user, household, householdMembers, householdInvites, isCloud,
-    refreshHousehold, createInvite, revokeInvite, renameHousehold, setBaseCurrency, leaveHousehold,
+    refreshHousehold, createInvite, revokeInvite, renameHousehold, setBaseCurrency, setDisplayName, leaveHousehold,
     signOut, exportData, importData, wipeData, deleteAccount,
     toast, clearExpenses, trips, createTrip, deleteTrip, importCsvRows,
   } = useApp()
@@ -38,6 +38,7 @@ export function SettingsScreen() {
   const [theme, setTheme] = useState<ThemeId>(() => readTheme())
   const [editName, setEditName] = useState(household?.name ?? '')
   const [editCurrency, setEditCurrency] = useState<CurrencyCode>(household?.baseCurrency ?? 'EUR')
+  const [myName, setMyName] = useState('')
   const [newLink, setNewLink] = useState<string | null>(null)
   const [newToken, setNewToken] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -49,7 +50,8 @@ export function SettingsScreen() {
   useEffect(() => {
     setEditName(household?.name ?? '')
     setEditCurrency(household?.baseCurrency ?? 'EUR')
-  }, [household?.id, household?.name, household?.baseCurrency])
+    setMyName(householdMembers.find((member) => member.userId === user?.id)?.name ?? user?.name ?? '')
+  }, [household?.id, household?.name, household?.baseCurrency, householdMembers, user?.id, user?.name])
 
   const activeInvites = householdInvites.filter(
     (invite) => !invite.revokedAt && new Date(invite.expiresAt) > new Date(),
@@ -62,6 +64,15 @@ export function SettingsScreen() {
     setBusy('rename')
     try { await renameHousehold(name); toast('Nombre actualizado.', 'success') }
     catch (error) { toast(error instanceof Error ? error.message : 'No pudimos renombrar.', 'error') }
+    finally { setBusy(null) }
+  }
+
+  async function handleMyName() {
+    const name = myName.trim()
+    if (!name) { toast('Poné tu nombre.', 'error'); return }
+    setBusy('myName')
+    try { await setDisplayName(name); toast('Nombre actualizado.', 'success') }
+    catch (error) { toast(error instanceof Error ? error.message : 'No pudimos cambiar tu nombre.', 'error') }
     finally { setBusy(null) }
   }
 
@@ -339,6 +350,20 @@ export function SettingsScreen() {
           </div>
         </Section>
       )}
+
+      <Section title="Tu nombre">
+        <div className="card p-4">
+          <p className="mb-2 text-[11px] leading-relaxed text-muted">
+            Así te van a ver en los gastos y en el saldo.
+          </p>
+          <div className="flex items-center gap-2">
+            <Input value={myName} onChange={(event) => setMyName(event.target.value)} maxLength={40} aria-label="Tu nombre" />
+            <Button size="sm" variant="secondary" onClick={() => void handleMyName()} disabled={busy === 'myName'}>
+              Guardar
+            </Button>
+          </div>
+        </div>
+      </Section>
 
       <Section title="Viajes">
         <div className="card space-y-3 p-4">

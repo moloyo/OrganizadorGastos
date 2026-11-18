@@ -9,12 +9,19 @@ export function memberIdsOf(
   return user ? [user.id] : []
 }
 
-/** `Vos` para el usuario actual, su email para el resto. Un id desconocido (cuenta borrada) es "Otra persona". */
+/** `Vos` para el usuario actual, el nombre del resto. Un id desconocido es "Otra persona". */
 export function memberLabel(
   id: string,
   members: HouseholdMember[],
   currentUserId?: string | null,
 ): string {
   if (id === currentUserId) return 'Vos'
-  return members.find((member) => member.userId === id)?.email || 'Otra persona'
+  const member = members.find((item) => item.userId === id)
+  return member?.name || member?.email || 'Otra persona'
+}
+
+/** Nombre de una persona, sin el "Vos" (para usar en listados compartidos). */
+export function displayNameOf(id: string, members: HouseholdMember[]): string {
+  const member = members.find((item) => item.userId === id)
+  return member?.name || member?.email || 'Otra persona'
 }
