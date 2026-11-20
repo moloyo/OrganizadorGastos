@@ -9,6 +9,7 @@ import {
   overallSummary,
   partsFromShares,
   settle,
+  sharesFromAmounts,
   sharesFromParts,
   sharesFromPercents,
   splitByCategory,
@@ -92,6 +93,35 @@ describe('reparto por partes', () => {
 
   it('conserva a quien tiene cero partes', () => {
     expect(partsFromShares({ [ANA]: 10000, [LUCAS]: 0 })).toEqual({ ana: 1, lucas: 0 })
+  })
+})
+
+describe('reparto por importes', () => {
+  it('el importe de cada persona es su parte de la deuda; el resto va a quien no puso importe', () => {
+    const shares = sharesFromAmounts({ ana: 1000, lucas: null, mara: null }, 10000)
+    expect(shares).toEqual({ ana: 1000, lucas: 4500, mara: 4500 })
+    expect(isValidShares(shares!)).toBe(true)
+    expect(allocateCents(10000, shares!)).toEqual({ ana: 1000, lucas: 4500, mara: 4500 })
+  })
+
+  it('los importes que suman el total se reparten como las partes de la deuda', () => {
+    const shares = sharesFromAmounts({ ana: 2000, lucas: 3000 }, 5000)
+    expect(shares).toEqual({ ana: 4000, lucas: 6000 })
+    expect(allocateCents(5000, shares!)).toEqual({ ana: 2000, lucas: 3000 })
+  })
+
+  it('un importe de cero queda fuera del reparto', () => {
+    expect(sharesFromAmounts({ ana: 0, lucas: null }, 10000)).toEqual({ ana: 5000, lucas: 5000 })
+  })
+
+  it('rechaza importes que superan el total del gasto', () => {
+    expect(sharesFromAmounts({ ana: 6000, lucas: 5000 }, 10000)).toBeNull()
+  })
+
+  it('con reparto por importes el saldo se calcula sobre los importes', () => {
+    const shares = sharesFromAmounts({ ana: 1000, lucas: null }, 10000)!
+    const { balances } = computeBalances([gasto(10000, ANA, shares)], [ANA, LUCAS])
+    expect(balances).toEqual({ ana: 9000, lucas: -9000 })
   })
 })
 

@@ -86,6 +86,42 @@ export function sharesFromParts(parts: Parts): Shares | null {
 }
 
 /**
+ * Convierte importes ingresados (base currency, null o 0 = sin ingresar) en
+ * puntos básicos. El importe de cada persona es su parte de la deuda del
+ * gasto; el resto de la deuda se reparte igual entre quienes no pusieron
+ * importe. Si todos entraron y la suma queda menor al total, el resto se
+ * reparte igual entre los que entraron.
+ */
+export function sharesFromAmounts(
+  amounts: Record<string, number | null>,
+  totalCents: number,
+): Shares | null {
+  if (totalCents <= 0) return null
+  const owed: Record<string, number> = {}
+  const blanks: string[] = []
+  let sumEntered = 0
+  for (const [id, value] of Object.entries(amounts)) {
+    if (value == null || value <= 0) { blanks.push(id); continue }
+    if (!Number.isInteger(value)) return null
+    owed[id] = value
+    sumEntered += value
+  }
+  if (sumEntered > totalCents) return null
+  const remainder = totalCents - sumEntered
+  if (remainder > 0) {
+    const recipients = blanks.length > 0 ? blanks : Object.keys(owed)
+    if (recipients.length === 0) return null
+    const extra = allocateByWeights(
+      remainder,
+      Object.fromEntries(recipients.map((id) => [id, 1])),
+      recipients.length,
+    )
+    for (const [id, cents] of Object.entries(extra)) owed[id] = (owed[id] ?? 0) + cents
+  }
+  return allocateByWeights(SHARES_TOTAL, owed, totalCents)
+}
+
+/**
  * Convierte puntos básicos en partes enteras. Busca una fracción simple
  * (hasta 12 partes) que reproduzca los porcentajes con error de 1 punto
  * básico como máximo: 6667/3333 -> 2/1, en vez de 6667/3333.

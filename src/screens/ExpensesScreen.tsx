@@ -8,16 +8,29 @@ import { ScreenHeader, Logo } from '../components/Shell'
 import { Button, EmptyState, Input, Sheet } from '../components/ui'
 import { CATEGORIES, categoryColor } from '../lib/constants'
 import {
-  equalShares, partsFromShares, sharesFromParts, sharesFromPercents, type Parts,
+  allocateCents, equalShares, partsFromShares, sharesFromAmounts, sharesFromParts, sharesFromPercents,
+  type Parts, type Shares,
 } from '../lib/balance'
 import { memberIdsOf, memberLabel } from '../lib/members'
 import { rememberedCategory, suggestDescriptions } from '../lib/suggestions'
-import { CURRENCIES, currencySymbol } from '../lib/currency'
+import { baseAmountOf, CURRENCIES, currencySymbol } from '../lib/currency'
 import { formatMoney, parseAmountToCents } from '../lib/money'
 import { formatShortDate, monthKey, monthLabel, todayISO } from '../lib/date'
 
 function toPercentInputs(shares: Record<string, number>): Record<string, string> {
   return Object.fromEntries(Object.entries(shares).map(([id, bps]) => [id, String(bps / 100)]))
+}
+
+function toAmountInputs(shares: Shares, totalCents: number): Record<string, string> {
+  const amounts = allocateCents(totalCents, shares)
+  return Object.fromEntries(
+    Object.entries(amounts).map(([id, cents]) => [id, amountInputFromCents(cents)]),
+  )
+}
+
+/** "10,50" para inputs: entero, coma y dos decimales. */
+function amountInputFromCents(cents: number): string {
+  return `${Math.floor(cents / 100)},${String(cents % 100).padStart(2, '0')}`
 }
 
 export function ExpensesScreen() {
@@ -37,7 +50,8 @@ export function ExpensesScreen() {
   const [percents, setPercents] = useState<Record<string, string>>({})
   const [parts, setParts] = useState<Parts>({})
   const [participants, setParticipants] = useState<Record<string, boolean>>({})
-  const [splitMode, setSplitMode] = useState<'percent' | 'parts'>('percent')
+  const [splitMode, setSplitMode] = useState<'percent' | 'parts' | 'amounts'>('percent')
+  const [amounts, setAmounts] = useState<Record<string, string>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [recurrence, setRecurrence] = useState<Recurrence>('none')
   const [query, setQuery] = useState('')
@@ -79,7 +93,21 @@ export function ExpensesScreen() {
     setCategory(suggestion.category)
   }
 
-  function currentShares() {
+  function baseTotalCents(): number {
+    return currency === baseCurrency
+      ? parseAmountToCents(amount) ?? 0
+      : parseAmountToCents(baseAmount) ?? 0
+  }
+
+  function currentShares(totalCents: number) {
+    if (splitMode === 'amounts') {
+      const entered: Record<string, number | null> = {}
+      for (const id of activeIds) {
+        const raw = amounts[id]?.trim() ?? ''
+        entered[id] = raw ? parseAmountToCents(raw) : null
+      }
+      return sharesFromAmounts(entered, totalCents)
+    }
     return splitMode === 'percent'
       ? sharesFromPercents(effectivePercents)
       : sharesFromParts(effectiveParts)
@@ -88,6 +116,11 @@ export function ExpensesScreen() {
   function toggleParticipant(id: string, participates: boolean) {
     const next = { ...participants, [id]: participates }
     setParticipants(next)
+    if (splitMode === 'amounts') {
+      setAmounts((prev) => (next[id] ? prev : { ...prev, [id]: '' }))
+      setError('')
+      return
+    }
     const remaining = editorIds.filter((item) => next[item] !== false)
     const even = equalShares(remaining)
     setPercents(toPercentInputs(even))
@@ -95,10 +128,11 @@ export function ExpensesScreen() {
     setError('')
   }
 
-  function changeSplitMode(mode: 'percent' | 'parts') {
-    const shares = currentShares() ?? equalShares(memberIds)
+  function changeSplitMode(mode: 'percent' | 'parts' | 'amounts') {
+    const shares = currentShares(baseTotalCents()) ?? equalShares(memberIds)
     if (mode === 'parts') setParts(partsFromShares(shares))
-    else setPercents(toPercentInputs(shares))
+    else if (mode === 'percent') setPercents(toPercentInputs(shares))
+    else setAmounts(toAmountInputs(shares, baseTotalCents()))
     setSplitMode(mode)
   }
 
@@ -117,6 +151,7 @@ export function ExpensesScreen() {
     setParts(partsFromShares(even))
     setParticipants(Object.fromEntries(memberIds.map((id) => [id, true])))
     setSplitMode('percent')
+    setAmounts({})
     setRecurrence('none')
   }
 
@@ -134,6 +169,7 @@ export function ExpensesScreen() {
       setPayerId(expense.paidBy)
       setPercents(toPercentInputs(expense.shares))
       setParts(partsFromShares(expense.shares))
+      setAmounts(toAmountInputs(expense.shares ?? {}, baseAmountOf(expense)))
       setParticipants(Object.fromEntries(
         editorIds.map((id) => [id, (expense.shares[id] ?? 0) > 0]),
       ))
@@ -159,11 +195,21 @@ export function ExpensesScreen() {
     if (converted === null) { setError(`Poné el equivalente en ${baseCurrency}.`); return }
     if (!payerId) { setError('Elegí quién pagó.'); return }
     if (activeIds.length === 0) { setError('Elegí al menos una persona que participe.'); return }
-    const shares = currentShares()
+    if (splitMode === 'amounts') {
+      const invalid = editorIds.some((id) => {
+        if (participants[id] === false) return false
+        const raw = amounts[id]?.trim() ?? ''
+        return Boolean(raw) && parseAmountToCents(raw) === null
+      })
+      if (invalid) { setError('Poné importes válidos (ej. 1250,50).'); return }
+    }
+    const shares = currentShares(converted)
     if (!shares) {
       setError(splitMode === 'percent'
         ? 'El reparto tiene que sumar exactamente 100 %.'
-        : 'Poné al menos una parte entera y mayor que cero.')
+        : splitMode === 'parts'
+          ? 'Poné al menos una parte entera y mayor que cero.'
+          : `La suma de los importes no puede superar el total del gasto (${formatMoney(converted, baseCurrency)}).`)
       return
     }
     const input = {
@@ -432,16 +478,17 @@ export function ExpensesScreen() {
                 type="button"
                 onClick={() => {
                   const even = equalShares(activeIds)
-                  setPercents(toPercentInputs(even))
-                  setParts(partsFromShares(even))
+                  if (splitMode === 'amounts') setAmounts(toAmountInputs(even, baseTotalCents()))
+                  else if (splitMode === 'parts') setParts(partsFromShares(even))
+                  else { setPercents(toPercentInputs(even)); setParts(partsFromShares(even)) }
                 }}
                 className="text-[11px] font-semibold text-brand hover:underline"
               >
                 Repartir por igual
               </button>
             </div>
-            <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-field p-1">
-              {(['percent', 'parts'] as const).map((mode) => (
+            <div className="mb-2 grid grid-cols-3 gap-1 rounded-lg bg-field p-1">
+              {(['percent', 'parts', 'amounts'] as const).map((mode) => (
                 <button
                   key={mode}
                   type="button"
@@ -451,10 +498,15 @@ export function ExpensesScreen() {
                     splitMode === mode ? 'bg-surface text-brand shadow-sm' : 'text-muted hover:text-ink'
                   }`}
                 >
-                  {mode === 'percent' ? 'Por porcentaje' : 'Por partes'}
+                  {mode === 'percent' ? 'Por porcentaje' : mode === 'parts' ? 'Por partes' : 'Por importes'}
                 </button>
               ))}
             </div>
+            {splitMode === 'amounts' && (
+              <p className="mb-2 text-[10.5px] text-muted">
+                Ingresá el importe que corresponde a cada persona; el resto del gasto se reparte igual entre quienes no pusieron importe.
+              </p>
+            )}
             <div className="space-y-2">
               {editorIds.map((id) => (
                 <div key={id} className="flex items-center gap-2">
@@ -469,23 +521,37 @@ export function ExpensesScreen() {
                     {label(id)}
                   </span>
                   <span className="w-24 shrink-0">
-                    <Input
-                      disabled={participants[id] === false}
-                      value={splitMode === 'percent' ? percents[id] ?? '' : String(parts[id] ?? '')}
-                      onChange={(event) => {
-                        const value = event.target.value
-                        if (splitMode === 'percent') {
-                          setPercents((prev) => ({ ...prev, [id]: value }))
-                        } else {
-                          setParts((prev) => ({ ...prev, [id]: value === '' ? 0 : Number(value) }))
-                        }
-                      }}
-                      inputMode={splitMode === 'percent' ? 'decimal' : 'numeric'}
-                      className="text-right"
-                      aria-label={splitMode === 'percent' ? `Porcentaje de ${label(id)}` : `Partes de ${label(id)}`}
-                    />
+                    {splitMode === 'amounts' ? (
+                      <Input
+                        disabled={participants[id] === false}
+                        value={amounts[id] ?? ''}
+                        onChange={(event) => setAmounts((prev) => ({ ...prev, [id]: event.target.value }))}
+                        inputMode="decimal"
+                        className="text-right"
+                        aria-label={`Importe de ${label(id)}`}
+                        placeholder="—"
+                      />
+                    ) : (
+                      <Input
+                        disabled={participants[id] === false}
+                        value={splitMode === 'percent' ? percents[id] ?? '' : String(parts[id] ?? '')}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          if (splitMode === 'percent') {
+                            setPercents((prev) => ({ ...prev, [id]: value }))
+                          } else {
+                            setParts((prev) => ({ ...prev, [id]: value === '' ? 0 : Number(value) }))
+                          }
+                        }}
+                        inputMode={splitMode === 'percent' ? 'decimal' : 'numeric'}
+                        className="text-right"
+                        aria-label={splitMode === 'percent' ? `Porcentaje de ${label(id)}` : `Partes de ${label(id)}`}
+                      />
+                    )}
                   </span>
-                  <span className="w-8 text-[13px] text-muted">{splitMode === 'percent' ? '%' : 'ptas.'}</span>
+                  <span className="w-8 text-[13px] text-muted">
+                    {splitMode === 'percent' ? '%' : splitMode === 'parts' ? 'ptas.' : currencySymbol(baseCurrency)}
+                  </span>
                 </div>
               ))}
             </div>

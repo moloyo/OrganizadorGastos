@@ -37,6 +37,20 @@ test('el reparto por partes se puede elegir y convertir', async ({ page }) => {
   await expect(page.getByText('Gasto por partes')).toBeVisible()
 })
 
+test('el reparto por importes se puede elegir e ingresar', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Agregar gasto' }).first().click()
+  const dialog = page.getByRole('dialog')
+  await dialog.getByRole('button', { name: 'Por importes' }).click()
+  const importe = dialog.getByLabel('Importe de Vos')
+  await expect(importe).toBeVisible()
+  await importe.fill('10,00')
+  await dialog.getByPlaceholder('Ej.: Verdulería').fill('Gasto por importes')
+  await dialog.getByLabel('Monto').fill('100')
+  await dialog.getByRole('button', { name: 'Guardar' }).click()
+  await expect(page.getByText('Gasto por importes')).toBeVisible()
+})
+
 test('un gasto se puede editar y el cambio persiste', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Editar Verdulería' }).click()
