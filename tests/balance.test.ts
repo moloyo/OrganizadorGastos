@@ -6,13 +6,17 @@ import {
   isValidShares,
   monthOf,
   monthSummary,
+  bpsToPercentInput,
   overallSummary,
   partsFromShares,
+  percentToBps,
+  rebalancePercents,
   rebalanceAmounts,
   settle,
   sharesFromAmounts,
   sharesFromParts,
   updateAmountSplit,
+  updatePercentSplit,
   sharesFromPercents,
   splitByCategory,
   isValidParts,
@@ -124,6 +128,46 @@ describe('reparto por importes', () => {
     const shares = sharesFromAmounts({ ana: 1000, lucas: null }, 10000)!
     const { balances } = computeBalances([gasto(10000, ANA, shares)], [ANA, LUCAS])
     expect(balances).toEqual({ ana: 9000, lucas: -9000 })
+  })
+})
+
+describe('ajuste automático de porcentajes', () => {
+  it('al poner 5 % el otro pasa a 95 %', () => {
+    const result = updatePercentSplit({ ana: 5000, lucas: 5000 }, {}, 'ana', 500)
+    expect(result.percents).toEqual({ ana: 500, lucas: 9500 })
+    expect(sharesFromPercents(Object.fromEntries(
+      Object.entries(result.percents).map(([id, bps]) => [id, bpsToPercentInput(bps ?? 0)]),
+    ))).toEqual(result.percents)
+  })
+
+  it('reparte el resto entre varios', () => {
+    const result = updatePercentSplit(
+      { ana: 3334, lucas: 3333, mara: 3333 }, {}, 'ana', 500,
+    )
+    expect(result.percents).toEqual({ ana: 500, lucas: 4750, mara: 4750 })
+  })
+
+  it('respeta los porcentajes escritos', () => {
+    const result = updatePercentSplit(
+      { ana: 5000, lucas: 3000, mara: 2000 }, { lucas: true }, 'ana', 500,
+    )
+    expect(result.percents).toEqual({ ana: 500, lucas: 3000, mara: 6500 })
+  })
+
+  it('con una sola persona siempre queda en 100 %', () => {
+    expect(updatePercentSplit({ ana: 5000 }, {}, 'ana', 500).percents).toEqual({ ana: 10000 })
+  })
+
+  it('convierte porcentajes con coma y recupera el texto', () => {
+    expect(percentToBps('5')).toBe(500)
+    expect(percentToBps('33,33')).toBe(3333)
+    expect(percentToBps('abc')).toBeNull()
+    expect(bpsToPercentInput(9500)).toBe('95')
+  })
+
+  it('rebalancea al cambiar un porcentaje escrito', () => {
+    expect(rebalancePercents({ ana: 500, lucas: 9500 }, { ana: true }))
+      .toEqual({ ana: 500, lucas: 9500 })
   })
 })
 

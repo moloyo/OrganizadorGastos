@@ -37,6 +37,16 @@ test('el reparto por partes se puede elegir y convertir', async ({ page }) => {
   await expect(page.getByText('Gasto por partes')).toBeVisible()
 })
 
+test('el porcentaje se ajusta solo al editarlo', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Agregar gasto' }).first().click()
+  const dialog = page.getByRole('dialog')
+  const porcentaje = dialog.getByLabel('Porcentaje de Vos')
+  await expect(porcentaje).toHaveValue('100')
+  await porcentaje.fill('5')
+  await expect(porcentaje).toHaveValue('100')
+})
+
 test('el reparto por importes se puede elegir e ingresar', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('button', { name: 'Agregar gasto' }).first().click()

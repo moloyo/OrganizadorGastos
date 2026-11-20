@@ -9,7 +9,8 @@ import { Button, EmptyState, Input, Sheet } from '../components/ui'
 import { CATEGORIES, categoryColor } from '../lib/constants'
 import {
   allocateCents, equalShares, partsFromShares, rebalanceAmounts, sharesFromAmounts, sharesFromParts,
-  sharesFromPercents, updateAmountSplit, type Parts, type Shares,
+  sharesFromPercents, updateAmountSplit, updatePercentSplit, rebalancePercents,
+  percentToBps, bpsToPercentInput, type Parts, type Shares,
 } from '../lib/balance'
 import { memberIdsOf, memberLabel } from '../lib/members'
 import { rememberedCategory, suggestDescriptions } from '../lib/suggestions'
@@ -48,6 +49,7 @@ export function ExpensesScreen() {
   const [note, setNote] = useState('')
   const [payerId, setPayerId] = useState('')
   const [percents, setPercents] = useState<Record<string, string>>({})
+  const [percentsLocked, setPercentsLocked] = useState<Record<string, boolean>>({})
   const [parts, setParts] = useState<Parts>({})
   const [participants, setParticipants] = useState<Record<string, boolean>>({})
   const [splitMode, setSplitMode] = useState<'percent' | 'parts' | 'amounts'>('percent')
@@ -100,11 +102,30 @@ export function ExpensesScreen() {
       : parseAmountToCents(baseAmount) ?? 0
   }
 
-  function amountValues(): Record<string, number | null> {
-    return Object.fromEntries(editorIds.map((id) => {
+  function amountValues(ids: string[] = activeIds): Record<string, number | null> {
+    return Object.fromEntries(ids.map((id) => {
       const raw = amounts[id]?.trim() ?? ''
       return [id, raw ? parseAmountToCents(raw) : null]
     }))
+  }
+
+  function percentValues(ids: string[] = activeIds): Record<string, number | null> {
+    return Object.fromEntries(ids.map((id) => [id, percentToBps(percents[id] ?? '')]))
+  }
+
+  function writePercentValues(next: Record<string, number | null>) {
+    setPercents(Object.fromEntries(
+      Object.entries(next).map(([id, bps]) => [id, bps === null ? '' : bpsToPercentInput(bps)]),
+    ))
+  }
+
+  function changePercent(id: string, raw: string) {
+    const result = updatePercentSplit(
+      percentValues(), percentsLocked, id, percentToBps(raw),
+    )
+    writePercentValues(result.percents)
+    setPercentsLocked(result.locked)
+    setError('')
   }
 
   function writeAmountValues(next: Record<string, number | null>) {
@@ -147,28 +168,49 @@ export function ExpensesScreen() {
   function toggleParticipant(id: string, participates: boolean) {
     const next = { ...participants, [id]: participates }
     setParticipants(next)
+    const remaining = editorIds.filter((item) => next[item] !== false)
+    setError('')
+
     if (splitMode === 'amounts') {
-      if (next[id]) {
-        const result = updateAmountSplit(
-          amountValues(), amountsLocked, id, null, baseTotalCents(),
-        )
+      const values = amountValues(remaining)
+      const locks = Object.fromEntries(remaining.map((item) => [item, Boolean(amountsLocked[item])]))
+      if (participates) {
+        const result = updateAmountSplit(values, locks, id, null, baseTotalCents())
         writeAmountValues(result.amounts)
         setAmountsLocked(result.locked)
+      } else {
+        writeAmountValues(rebalanceAmounts(values, locks, baseTotalCents()))
+        setAmountsLocked(locks)
       }
-      setError('')
       return
     }
-    const remaining = editorIds.filter((item) => next[item] !== false)
+
+    if (splitMode === 'percent') {
+      const values = percentValues(remaining)
+      const locks = Object.fromEntries(remaining.map((item) => [item, Boolean(percentsLocked[item])]))
+      if (participates) {
+        const result = updatePercentSplit(values, locks, id, null)
+        writePercentValues(result.percents)
+        setPercentsLocked(result.locked)
+      } else {
+        writePercentValues(rebalancePercents(values, locks))
+        setPercentsLocked(locks)
+      }
+      return
+    }
+
     const even = equalShares(remaining)
     setPercents(toPercentInputs(even))
     setParts(partsFromShares(even))
-    setError('')
   }
 
   function changeSplitMode(mode: 'percent' | 'parts' | 'amounts') {
     const shares = currentShares(baseTotalCents()) ?? equalShares(memberIds)
     if (mode === 'parts') setParts(partsFromShares(shares))
-    else if (mode === 'percent') setPercents(toPercentInputs(shares))
+    else if (mode === 'percent') {
+      setPercents(toPercentInputs(shares))
+      setPercentsLocked({})
+    }
     else {
       setAmounts(toAmountInputs(shares, baseTotalCents()))
       setAmountsLocked({})
@@ -188,6 +230,7 @@ export function ExpensesScreen() {
     setPayerId(user?.id ?? memberIds[0] ?? '')
     const even = equalShares(memberIds)
     setPercents(toPercentInputs(even))
+    setPercentsLocked({})
     setParts(partsFromShares(even))
     setParticipants(Object.fromEntries(memberIds.map((id) => [id, true])))
     setSplitMode('percent')
@@ -209,6 +252,7 @@ export function ExpensesScreen() {
       setNote(expense.note)
       setPayerId(expense.paidBy)
       setPercents(toPercentInputs(expense.shares))
+      setPercentsLocked({})
       setParts(partsFromShares(expense.shares))
       setAmounts(toAmountInputs(expense.shares ?? {}, baseAmountOf(expense)))
       setAmountsLocked({})
@@ -530,7 +574,11 @@ export function ExpensesScreen() {
                     setAmountsLocked({})
                   }
                   else if (splitMode === 'parts') setParts(partsFromShares(even))
-                  else { setPercents(toPercentInputs(even)); setParts(partsFromShares(even)) }
+                  else {
+                    setPercents(toPercentInputs(even))
+                    setPercentsLocked({})
+                    setParts(partsFromShares(even))
+                  }
                 }}
                 className="text-[11px] font-semibold text-brand hover:underline"
               >
@@ -588,7 +636,7 @@ export function ExpensesScreen() {
                         onChange={(event) => {
                           const value = event.target.value
                           if (splitMode === 'percent') {
-                            setPercents((prev) => ({ ...prev, [id]: value }))
+                            changePercent(id, value)
                           } else {
                             setParts((prev) => ({ ...prev, [id]: value === '' ? 0 : Number(value) }))
                           }

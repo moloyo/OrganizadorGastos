@@ -93,6 +93,8 @@ export function updateAmountSplit(
 
   if (editedValue !== null) {
     next[editedId] = Math.min(editedValue, Math.max(0, totalCents - sumLockedOthers))
+    // Una sola persona: no hay a quién repartir el resto, se lleva todo.
+    if (ids.length === 1) next[editedId] = totalCents
   }
 
   const sumLocked = ids.reduce(
@@ -143,6 +145,37 @@ export function rebalanceAmounts(
   )
   for (const id of autoIds) next[id] = parts[id] ?? 0
   return next
+}
+
+/** Igual que updateAmountSplit pero sobre 10000 puntos básicos (100 %). */
+export function updatePercentSplit(
+  percents: Record<string, number | null>,
+  locked: Record<string, boolean>,
+  editedId: string,
+  editedValue: number | null,
+): { percents: Record<string, number | null>; locked: Record<string, boolean> } {
+  const result = updateAmountSplit(percents, locked, editedId, editedValue, SHARES_TOTAL)
+  return { percents: result.amounts, locked: result.locked }
+}
+
+/** Reajusta los porcentajes automáticos. */
+export function rebalancePercents(
+  percents: Record<string, number | null>,
+  locked: Record<string, boolean>,
+): Record<string, number | null> {
+  return rebalanceAmounts(percents, locked, SHARES_TOTAL)
+}
+
+/** `"33,33"` -> 3333 puntos básicos. `null` si no es un porcentaje válido. */
+export function percentToBps(raw: string): number | null {
+  const value = raw.trim().replace(',', '.')
+  if (!value) return null
+  if (!/^\d+(\.\d{1,2})?$/.test(value)) return null
+  return Math.round(Number(value) * 100)
+}
+
+export function bpsToPercentInput(bps: number): string {
+  return String(bps / 100)
 }
 
 /** Partes enteras no negativas, con al menos una mayor que cero. */
