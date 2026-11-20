@@ -40,6 +40,18 @@ export interface Transfer {
   createdAt: string
 }
 
+/** Aviso para un miembro del hogar: alguien cargó un gasto. */
+export interface AppNotification {
+  id: string
+  kind: 'expense'
+  actorId: string | null
+  expenseId: string | null
+  description: string
+  amountCents: number
+  readAt: string | null
+  createdAt: string
+}
+
 /** Bolsillo independiente con su propia moneda base. */
 export interface Trip {
   id: string
@@ -158,6 +170,10 @@ export interface DataAdapter extends HouseholdAdapter {
   listTrips(): Promise<Trip[]>
   createTrip(trip: Trip): Promise<void>
   deleteTrip(id: string): Promise<void>
+
+  listNotifications(): Promise<AppNotification[]>
+  markNotificationRead(id: string): Promise<void>
+  markAllNotificationsRead(): Promise<void>
 
   exportAll(): Promise<Snapshot>
   importAll(snapshot: Snapshot): Promise<void>

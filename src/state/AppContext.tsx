@@ -9,6 +9,7 @@ import {
   type ReactNode,
 } from 'react'
 import type {
+  AppNotification,
   CurrencyCode,
   DataAdapter,
   Expense,
@@ -28,7 +29,7 @@ import { isCurrency } from '../lib/currency'
 import { normalizeCategory } from '../lib/constants'
 import { equalShares } from '../lib/balance'
 import { addMonthsToISO, currentMonthKey, monthKey, shiftMonth } from '../lib/date'
-import { sumCents, totalsByCategory } from '../lib/money'
+import { formatMoney, sumCents, totalsByCategory } from '../lib/money'
 import { shouldRefreshFromRealtime } from '../lib/realtime'
 
 export type ToastTone = 'success' | 'error' | 'info'
@@ -60,6 +61,11 @@ interface AppContextValue {
   transfers: Transfer[]
   addTransfer: (transfer: Transfer) => Promise<void>
   deleteTransfer: (id: string) => Promise<void>
+  notifications: AppNotification[]
+  unreadCount: number
+  refreshNotifications: () => Promise<void>
+  markNotificationRead: (id: string) => Promise<void>
+  markAllNotificationsRead: () => Promise<void>
   isCloud: boolean
   month: string
   goToMonth: (key: string) => void
@@ -138,6 +144,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [month, setMonth] = useState(currentMonthKey)
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [transfers, setTransfers] = useState<Transfer[]>([])
+  const [notifications, setNotifications] = useState<AppNotification[]>([])
   const [trips, setTrips] = useState<Trip[]>([])
   const [activeTripId, setActiveTripId] = useState<string | null>(null)
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -220,14 +227,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
   /* --------------------------- Datos iniciales --------------------------- */
 
   const reloadAll = useCallback(async () => {
-    const [nextExpenses, nextTransfers, nextTrips] = await Promise.all([
+    const [nextExpenses, nextTransfers, nextTrips, nextNotifications] = await Promise.all([
       adapter.listExpenses(),
       adapter.listTransfers(),
       adapter.listTrips(),
+      adapter.listNotifications(),
     ])
     setExpenses(nextExpenses)
     setTransfers(nextTransfers)
     setTrips(nextTrips)
+    setNotifications(nextNotifications)
+  }, [adapter])
+
+  const refreshNotifications = useCallback(async () => {
+    setNotifications(await adapter.listNotifications())
   }, [adapter])
 
   useEffect(() => {
@@ -235,6 +248,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setExpenses([])
       setTransfers([])
       setTrips([])
+      setNotifications([])
       setActiveTripId(null)
       setLoaded(true)
       return
@@ -427,6 +441,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   }, [adapter, expenses, toast])
 
+  const markNotificationRead = useCallback(
+    async (id: string) => {
+      setNotifications((prev) => prev.map((item) =>
+        item.id === id ? { ...item, readAt: item.readAt ?? new Date().toISOString() } : item))
+      try { await adapter.markNotificationRead(id) }
+      catch { await refreshNotifications().catch(() => {}) }
+    },
+    [adapter, refreshNotifications],
+  )
+
+  const markAllNotificationsRead = useCallback(async () => {
+    const now = new Date().toISOString()
+    setNotifications((prev) => prev.map((item) => ({ ...item, readAt: item.readAt ?? now })))
+    try { await adapter.markAllNotificationsRead() }
+    catch { await refreshNotifications().catch(() => {}) }
+  }, [adapter, refreshNotifications])
+
+  const seenNotifications = useRef<Set<string> | null>(null)
+  useEffect(() => {
+    if (!user) { seenNotifications.current = null; return }
+    const ids = new Set(notifications.map((item) => item.id))
+    if (seenNotifications.current === null) { seenNotifications.current = ids; return }
+    const fresh = notifications.filter((item) => !seenNotifications.current!.has(item.id))
+    seenNotifications.current = ids
+    if (fresh.length === 0) return
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted' || !document.hidden) return
+    for (const item of fresh) {
+      new Notification('Nuevo gasto del hogar', {
+        body: `${item.description} · ${formatMoney(item.amountCents, baseCurrency)}`,
+      })
+    }
+  }, [notifications, user?.id, baseCurrency])
+
   const setBaseCurrency = useCallback(
     async (code: CurrencyCode) => {
       await adapter.setHouseholdBaseCurrency(code)
@@ -590,6 +637,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setExpenses([])
     setTransfers([])
     setTrips([])
+    setNotifications([])
     setActiveTripId(null)
   }, [adapter])
   const resetPassword = useCallback((email: string) => adapter.resetPassword(email), [adapter])
@@ -598,6 +646,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await adapter.deleteAccount()
     setUser(null)
     setExpenses([])
+    setTransfers([])
+    setTrips([])
+    setNotifications([])
+    setActiveTripId(null)
   }, [adapter])
 
   const exportData = useCallback(() => adapter.exportAll(), [adapter])
@@ -624,6 +676,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     trips, activeTripId, setActiveTrip: setActiveTripId,
     createTrip, deleteTrip,
     transfers, addTransfer, deleteTransfer,
+    notifications,
+    unreadCount: notifications.filter((item) => !item.readAt).length,
+    refreshNotifications, markNotificationRead, markAllNotificationsRead,
     isCloud: cloudConfigured,
     month,
     goToMonth: (key: string) => setMonth(key),

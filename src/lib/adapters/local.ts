@@ -1,5 +1,6 @@
 import { isCurrency, withCurrencyDefaults } from '../currency'
 import type {
+  AppNotification,
   CurrencyCode,
   DataAdapter,
   Expense,
@@ -29,6 +30,7 @@ interface LocalDB {
   baseCurrency: CurrencyCode
   transfers: Transfer[]
   trips: Trip[]
+  notifications: AppNotification[]
 }
 
 const SEED_EXPENSES: Expense[] = [
@@ -99,6 +101,7 @@ function read(): LocalDB {
           expenses: parsed.expenses.map((expense) => withPayerAndShares(expense, base)),
           transfers: Array.isArray(parsed.transfers) ? parsed.transfers : [],
           trips: Array.isArray(parsed.trips) ? parsed.trips : [],
+          notifications: Array.isArray(parsed.notifications) ? parsed.notifications : [],
         }
       }
     }
@@ -111,6 +114,7 @@ function read(): LocalDB {
     baseCurrency: 'EUR',
     transfers: [],
     trips: [],
+    notifications: [],
   }
   write(fresh)
   return fresh
@@ -274,6 +278,22 @@ export function createLocalAdapter(): DataAdapter {
       write(db)
     },
 
+    async listNotifications() {
+      return read().notifications
+    },
+    async markNotificationRead(id) {
+      const db = read()
+      db.notifications = db.notifications.map((item) =>
+        item.id === id ? { ...item, readAt: new Date().toISOString() } : item)
+      write(db)
+    },
+    async markAllNotificationsRead() {
+      const db = read()
+      const now = new Date().toISOString()
+      db.notifications = db.notifications.map((item) => ({ ...item, readAt: item.readAt ?? now }))
+      write(db)
+    },
+
     async exportAll(): Promise<Snapshot> {
       return {
         app: 'gastos',
@@ -290,13 +310,14 @@ export function createLocalAdapter(): DataAdapter {
         baseCurrency: db.baseCurrency,
         transfers: db.transfers,
         trips: db.trips,
+        notifications: db.notifications,
       })
     },
     async wipe() {
       const db = read()
       write({
         expenses: [], householdName: db.householdName, baseCurrency: db.baseCurrency,
-        transfers: [], trips: db.trips,
+        transfers: [], trips: db.trips, notifications: db.notifications,
       })
     },
   }

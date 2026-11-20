@@ -508,6 +508,16 @@ export function createOfflineAdapter(
       }
     },
 
+    async listNotifications() {
+      return base.listNotifications()
+    },
+    async markNotificationRead(id) {
+      await base.markNotificationRead(id)
+    },
+    async markAllNotificationsRead() {
+      await base.markAllNotificationsRead()
+    },
+
     async exportAll(): Promise<Snapshot> {
       const uid = await ensureScope()
       const cached = uid ? cacheGet(uid) : null

@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { CloudUpload, PieChart, RefreshCw, Scale, Wallet, WifiOff, Settings, History } from 'lucide-react'
 import clsx from 'clsx'
 import { useApp } from '../state/AppContext'
+import { NotificationCenter } from './NotificationCenter'
 
 export function Logo({ size = 40 }: { size?: number }) {
   return (
@@ -128,6 +129,7 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[560px] flex-col">
       <main className="flex-1 px-4 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
+        <div className="mb-2 flex justify-end"><NotificationCenter /></div>
         <OfflineBanner />
         <TripSwitcher />
         {children}

@@ -145,6 +145,14 @@ test('un viaje es un ámbito separado con su propia moneda', async ({ page }) =>
   await expect(page.getByText('Hotel')).toBeHidden()
 })
 
+test('el campanito abre el centro de notificaciones', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Notificaciones' }).click()
+  const dialog = page.getByRole('dialog')
+  await expect(dialog.getByRole('heading', { name: 'Notificaciones' })).toBeVisible()
+  await expect(dialog.getByText(/Cuando alguien del hogar cargue un gasto/)).toBeVisible()
+})
+
 test('Ajustes permite cambiar el nombre visible', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('link', { name: 'Ajustes' }).click()

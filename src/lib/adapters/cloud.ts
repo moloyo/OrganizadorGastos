@@ -4,6 +4,7 @@ import type {
   Expense,
   Household,
   HouseholdInvite,
+  AppNotification,
   HouseholdMember,
   InviteInfo,
   Recurrence,
@@ -45,6 +46,17 @@ interface TransferRow {
   note: string | null
   paid_on: string
   trip_id: string | null
+  created_at: string
+}
+
+interface NotificationRow {
+  id: string
+  kind: string
+  actor_id: string | null
+  expense_id: string | null
+  description: string
+  amount_cents: number
+  read_at: string | null
   created_at: string
 }
 
@@ -182,6 +194,19 @@ function mapTransfer(row: TransferRow): Transfer {
     note: row.note ?? '',
     paidOn: row.paid_on,
     tripId: row.trip_id ?? null,
+    createdAt: row.created_at,
+  }
+}
+
+function mapNotification(row: NotificationRow): AppNotification {
+  return {
+    id: row.id,
+    kind: 'expense',
+    actorId: row.actor_id,
+    expenseId: row.expense_id,
+    description: row.description,
+    amountCents: row.amount_cents,
+    readAt: row.read_at,
     createdAt: row.created_at,
   }
 }
@@ -604,6 +629,35 @@ export function createCloudAdapter(url: string, anonKey: string): DataAdapter {
 
     async deleteTrip(id) {
       const { error } = await client.from('trips').delete().eq('id', id)
+      if (error) throw new Error(error.message)
+    },
+
+    /* --------------------------- Notificaciones --------------------------- */
+
+    async listNotifications() {
+      const { data, error } = await client
+        .from('notifications')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (error) throw new Error(error.message)
+      return ((data ?? []) as NotificationRow[]).map(mapNotification)
+    },
+
+    async markNotificationRead(id) {
+      const { error } = await client
+        .from('notifications')
+        .update({ read_at: new Date().toISOString() })
+        .eq('id', id)
+        .is('read_at', null)
+      if (error) throw new Error(error.message)
+    },
+
+    async markAllNotificationsRead() {
+      const { error } = await client
+        .from('notifications')
+        .update({ read_at: new Date().toISOString() })
+        .is('read_at', null)
       if (error) throw new Error(error.message)
     },
 

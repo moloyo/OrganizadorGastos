@@ -46,6 +46,9 @@ export function SettingsScreen() {
   const [tripCurrency, setTripCurrency] = useState<CurrencyCode>('EUR')
   const [tripStart, setTripStart] = useState(todayISO())
   const [tripEnd, setTripEnd] = useState(todayISO())
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification === 'undefined' ? 'denied' : Notification.permission,
+  )
 
   useEffect(() => {
     setEditName(household?.name ?? '')
@@ -171,6 +174,17 @@ export function SettingsScreen() {
     } finally {
       setBusy(null)
       if (csvRef.current) csvRef.current.value = ''
+    }
+  }
+
+  async function handleEnableNotifications() {
+    if (typeof Notification === 'undefined') { toast('Este navegador no admite notificaciones.', 'error'); return }
+    try {
+      const result = await Notification.requestPermission()
+      setNotificationPermission(result)
+      toast(result === 'granted' ? 'Notificaciones activadas.' : 'Permiso no concedido.', result === 'granted' ? 'success' : 'info')
+    } catch {
+      toast('No pudimos pedir el permiso.', 'error')
     }
   }
 
@@ -350,6 +364,27 @@ export function SettingsScreen() {
           </div>
         </Section>
       )}
+
+      <Section title="Notificaciones">
+        <div className="card p-4">
+          <p className="text-[12.5px] font-semibold text-ink">Avisos del navegador</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted">
+            Si dejás la app abierta en una pestaña, vas a recibir un aviso cuando alguien cargue un gasto. Siempre podés ver el historial en el campanito.
+          </p>
+          <Button
+            size="sm"
+            className="mt-3 w-full"
+            onClick={() => void handleEnableNotifications()}
+            disabled={notificationPermission === 'granted'}
+          >
+            {notificationPermission === 'granted'
+              ? 'Notificaciones activadas'
+              : notificationPermission === 'denied'
+                ? 'Permiso bloqueado (activarlo en el navegador)'
+                : 'Activar notificaciones'}
+          </Button>
+        </div>
+      </Section>
 
       <Section title="Tu nombre">
         <div className="card p-4">
