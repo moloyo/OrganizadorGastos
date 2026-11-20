@@ -98,33 +98,115 @@ html[data-theme='gatitos'] {
   --body-glow: none;
 }
 
+/* Neón Noche (tema "oscuro", estilo cyberpunk) */
 html[data-theme='oscuro'] {
   color-scheme: dark;
-  --color-cream: #0f1512;
-  --color-surface: #17201b;
-  --color-ink: #e7efe9;
-  --color-muted: #94a69b;
-  --color-line: #27332c;
-  --color-line-strong: #3a4a41;
-  --color-brand: #5db98d;
-  --color-brand-dark: #92dcb7;
-  --color-brand-soft: #1c352a;
-  --color-on-brand: #081410;
-  --color-accent: #e98a5d;
-  --color-accent-soft: #3a261d;
-  --color-field: #121a16;
-  --color-danger-soft: #3a211d;
-  --color-danger-ink: #e5a79b;
-  --color-danger-strong: #f0b0a5;
-  --color-danger-border: #5c3630;
-  --color-success-soft: #16302a;
-  --color-success-ink: #92dcb7;
-  --color-success-border: #2c5245;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px -16px rgba(0, 0, 0, 0.6);
-  --shadow-float: 0 10px 40px -12px rgba(0, 0, 0, 0.65);
+  --font-sans: "Exo 2 Variable", "Exo 2", system-ui, sans-serif;
+  --font-display: "Orbitron Variable", "Orbitron", sans-serif;
+  --color-cream: #07070f;
+  --color-surface: #0d0e1c;
+  --color-ink: #e6f7ff;
+  --color-muted: #7d8fb0;
+  --color-line: #1c2a4a;
+  --color-line-strong: #2b3f6b;
+  --color-brand: #00f0ff;
+  --color-brand-dark: #7ff9ff;
+  --color-brand-soft: #0b2a33;
+  --color-on-brand: #001014;
+  --color-accent: #ff2e88;
+  --color-accent-soft: #33112a;
+  --color-field: #0a0b18;
+  --color-danger-soft: #33101c;
+  --color-danger-ink: #ff6b9a;
+  --color-danger-strong: #ff9dbd;
+  --color-danger-border: #6b1d3d;
+  --color-success-soft: #0b2a22;
+  --color-success-ink: #5affc3;
+  --color-success-border: #1d5a48;
+  --shadow-card: 0 0 0 1px rgba(0, 240, 255, 0.08), 0 0 18px -4px rgba(0, 240, 255, 0.22);
+  --shadow-float: 0 0 30px -6px rgba(255, 46, 136, 0.35), 0 12px 40px -12px rgba(0, 0, 0, 0.8);
   --body-glow:
-    radial-gradient(60rem 40rem at 110% -10%, rgba(29, 53, 42, 0.55), transparent 60%),
-    radial-gradient(50rem 30rem at -20% 0%, rgba(58, 38, 29, 0.4), transparent 55%);
+    radial-gradient(40rem 26rem at 110% -10%, rgba(255, 46, 136, 0.12), transparent 60%),
+    radial-gradient(44rem 28rem at -15% 110%, rgba(0, 240, 255, 0.07), transparent 60%);
+}
+
+html[data-theme='oscuro'] body {
+  background-color: #07070f;
+  background-image:
+    linear-gradient(rgba(0, 240, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.06) 1px, transparent 1px),
+    var(--body-glow);
+  background-size: 32px 32px, 32px 32px, auto;
+}
+
+/* Líneas de escaneo sobre toda la pantalla (no bloquean los toques). */
+html[data-theme='oscuro'] body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, 0.025) 0 1px, transparent 1px 3px);
+  animation: scan-drift 9s linear infinite;
+}
+
+html[data-theme='oscuro'] .card {
+  border-color: rgba(0, 240, 255, 0.22);
+  position: relative;
+}
+
+html[data-theme='oscuro'] .card::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 14px;
+  height: 14px;
+  border-top: 2px solid var(--color-accent);
+  border-left: 2px solid var(--color-accent);
+  border-top-left-radius: 16px;
+  pointer-events: none;
+}
+
+html[data-theme='oscuro'] h1,
+html[data-theme='oscuro'] h2 {
+  text-shadow: 0 0 14px rgba(0, 240, 255, 0.45);
+  animation: neon-flicker 6s linear 1;
+}
+
+html[data-theme='oscuro'] .font-display {
+  letter-spacing: 0.04em;
+}
+
+/* Aberración cromática suave en los montos grandes. */
+html[data-theme='oscuro'] .font-display.text-\[30px\] {
+  text-shadow: -1px 0 rgba(255, 46, 136, 0.5), 1px 0 rgba(0, 240, 255, 0.5);
+}
+
+html[data-theme='oscuro'] .text-brand {
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.35);
+}
+
+html[data-theme='oscuro'] button:not(:disabled):hover {
+  filter: brightness(1.12);
+}
+
+@keyframes scan-drift {
+  from { background-position: 0 0; }
+  to { background-position: 0 60px; }
+}
+
+@keyframes neon-flicker {
+  0%, 18%, 22%, 62%, 64%, 100% { opacity: 1; }
+  20%, 63% { opacity: 0.72; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-theme='oscuro'] body::after,
+  html[data-theme='oscuro'] h1,
+  html[data-theme='oscuro'] h2 {
+    animation: none;
+  }
 }
 
 /* ------------------------------- Base ------------------------------- */

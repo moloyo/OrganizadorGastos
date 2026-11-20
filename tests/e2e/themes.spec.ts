@@ -15,7 +15,7 @@ test('el tema se elige en Ajustes y sobrevive a la recarga', async ({ page }) =>
   await page.goto('/#/ajustes')
   await expect(page.getByRole('heading', { name: 'Ajustes' })).toBeVisible()
 
-  await page.getByRole('button', { name: /Oscuro/ }).click()
+  await page.getByRole('button', { name: /Neón/ }).click()
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'oscuro')
 
   await page.reload()

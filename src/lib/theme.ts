@@ -25,10 +25,10 @@ export const THEMES: ThemeMeta[] = [
   },
   {
     id: 'oscuro',
-    label: 'Oscuro',
-    hint: 'Para la noche',
-    themeColor: '#0F1512',
-    preview: { background: '#0F1512', surface: '#17201B', brand: '#5DB98D', accent: '#E98A5D' },
+    label: 'Neón',
+    hint: 'Cyberpunk, de noche',
+    themeColor: '#07070F',
+    preview: { background: '#07070F', surface: '#0D0E1C', brand: '#00F0FF', accent: '#FF2E88' },
   },
   {
     id: 'gatitos',
