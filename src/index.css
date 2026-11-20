@@ -162,9 +162,7 @@ html[data-theme='gatitos'] .gatitos-band {
   display: block;
   height: 120px;
   margin-top: 28px;
-  background: url('/gatitos/gatos.webp') center bottom / auto 100% no-repeat;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14%);
-  mask-image: linear-gradient(to bottom, transparent 0%, #000 14%);
+  background: url('/gatitos/gatos-v2.webp') center bottom / auto 100% no-repeat;
   pointer-events: none;
 }
 
