@@ -135,6 +135,7 @@ export function Shell({ children }: { children: ReactNode }) {
         <OfflineBanner />
         <TripSwitcher />
         {children}
+        <div className="gatitos-band" aria-hidden />
       </main>
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-[560px] justify-around border-t border-line bg-surface/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur">
         {TABS.map((tab) => {

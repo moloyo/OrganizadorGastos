@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
-  Check, Copy, Download, Link2, LogOut, Moon, Pencil, Sun, Trash2, Upload, Users, Waves,
+  Cat, Check, Copy, Download, Link2, LogOut, Moon, Pencil, Sun, Trash2, Upload, Users, Waves,
 } from 'lucide-react'
 import clsx from 'clsx'
 import { useApp } from '../state/AppContext'
@@ -24,7 +24,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-const THEME_ICONS = { clasico: Sun, cool: Waves, oscuro: Moon } as const
+const THEME_ICONS = { clasico: Sun, cool: Waves, oscuro: Moon, gatitos: Cat } as const
 
 export function SettingsScreen() {
   const {
@@ -438,7 +438,7 @@ export function SettingsScreen() {
 
       <Section title="Apariencia">
         <div className="card p-3">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {THEMES.map((option) => {
               const active = theme === option.id
               const Icon = THEME_ICONS[option.id]

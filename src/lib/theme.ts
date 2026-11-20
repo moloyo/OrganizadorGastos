@@ -1,4 +1,4 @@
-export type ThemeId = 'clasico' | 'cool' | 'oscuro'
+export type ThemeId = 'clasico' | 'cool' | 'oscuro' | 'gatitos'
 
 export interface ThemeMeta {
   id: ThemeId
@@ -30,6 +30,13 @@ export const THEMES: ThemeMeta[] = [
     themeColor: '#0F1512',
     preview: { background: '#0F1512', surface: '#17201B', brand: '#5DB98D', accent: '#E98A5D' },
   },
+  {
+    id: 'gatitos',
+    label: 'Gatitos',
+    hint: 'Papel de cuaderno',
+    themeColor: '#B9632F',
+    preview: { background: '#F4F9FD', surface: '#FFFFFF', brand: '#B9632F', accent: '#4A86BD' },
+  },
 ]
 
 const KEY = 'gastos:theme'
@@ -37,7 +44,7 @@ const KEY = 'gastos:theme'
 export function readTheme(): ThemeId {
   try {
     const value = localStorage.getItem(KEY)
-    return value === 'cool' || value === 'oscuro' ? value : 'clasico'
+    return value === 'cool' || value === 'oscuro' || value === 'gatitos' ? value : 'clasico'
   } catch {
     return 'clasico'
   }

@@ -71,6 +71,33 @@ html[data-theme='cool'] {
     radial-gradient(50rem 30rem at -20% 0%, rgba(204, 251, 241, 0.8), transparent 55%);
 }
 
+html[data-theme='gatitos'] {
+  --font-sans: "Nunito Variable", ui-rounded, "Nunito", system-ui, sans-serif;
+  --font-display: "Patrick Hand", "Nunito Variable", cursive;
+  --color-cream: #f4f9fd;
+  --color-surface: #ffffff;
+  --color-ink: #2f3a4a;
+  --color-muted: #6f7f93;
+  --color-line: #d8e6f3;
+  --color-line-strong: #b9d1e6;
+  --color-brand: #b9632f;
+  --color-brand-dark: #8f4a21;
+  --color-brand-soft: #fbe9dc;
+  --color-on-brand: #ffffff;
+  --color-accent: #4a86bd;
+  --color-accent-soft: #e1eef9;
+  --color-field: #fbfdff;
+  --color-danger-soft: #fbe4df;
+  --color-danger-ink: #a8443f;
+  --color-danger-strong: #8f3a2f;
+  --color-danger-border: #e7c3b8;
+  --color-success-soft: #eaf6ee;
+  --color-success-ink: #2f6b4a;
+  --color-success-border: #bfe0cb;
+  --shadow-card: 0 1px 2px rgba(47, 58, 74, 0.08), 0 10px 24px -18px rgba(47, 58, 74, 0.35);
+  --body-glow: none;
+}
+
 html[data-theme='oscuro'] {
   color-scheme: dark;
   --color-cream: #0f1512;
@@ -114,6 +141,32 @@ body {
 }
 
 .font-display { font-family: var(--font-display); }
+
+/* Tema gatitos: papel de cuaderno (cuadrícula azul) y una franja de gatos al pie. */
+html[data-theme='gatitos'] body {
+  background-color: #fbfdff;
+  background-image:
+    linear-gradient(rgba(74, 134, 189, 0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(74, 134, 189, 0.16) 1px, transparent 1px);
+  background-size: 26px 26px;
+  background-attachment: fixed;
+}
+
+html[data-theme='gatitos'] .card {
+  border-radius: 20px;
+}
+
+.gatitos-band { display: none; }
+
+html[data-theme='gatitos'] .gatitos-band {
+  display: block;
+  height: 120px;
+  margin-top: 28px;
+  background: url('/gatitos/gatos.webp') center bottom / auto 100% no-repeat;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 14%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 14%);
+  pointer-events: none;
+}
 
 .card {
   background: var(--color-surface);
