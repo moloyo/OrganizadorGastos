@@ -68,6 +68,83 @@ export function sharesFromPercents(percents: Record<string, string>): Shares | n
   return isValidShares(shares) ? shares : null
 }
 
+/**
+ * Al editar el importe de una persona, recalcula los campos "automáticos"
+ * para que la suma vuelva a ser exactamente el total. Los importes que el
+ * usuario escribió (locked) se respetan; si no queda ningún campo automático,
+ * el resto se reparte entre los demás y ésos dejan de estar bloqueados.
+ * `null` = campo vacío.
+ */
+export function updateAmountSplit(
+  amounts: Record<string, number | null>,
+  locked: Record<string, boolean>,
+  editedId: string,
+  editedValue: number | null,
+  totalCents: number,
+): { amounts: Record<string, number | null>; locked: Record<string, boolean> } {
+  const next = { ...amounts, [editedId]: editedValue }
+  const nextLocked = { ...locked, [editedId]: editedValue !== null }
+  if (totalCents <= 0) return { amounts: next, locked: nextLocked }
+
+  const ids = Object.keys(next)
+  const others = ids.filter((id) => id !== editedId)
+  const lockedOthers = others.filter((id) => nextLocked[id] && next[id] != null)
+  const sumLockedOthers = lockedOthers.reduce((sum, id) => sum + (next[id] ?? 0), 0)
+
+  if (editedValue !== null) {
+    next[editedId] = Math.min(editedValue, Math.max(0, totalCents - sumLockedOthers))
+  }
+
+  const sumLocked = ids.reduce(
+    (sum, id) => sum + (nextLocked[id] && next[id] != null ? next[id]! : 0), 0,
+  )
+  const autoIds = ids.filter((id) => !nextLocked[id] || next[id] == null)
+  const remainder = Math.max(0, totalCents - sumLocked)
+
+  if (autoIds.length > 0) {
+    const parts = allocateByWeights(
+      remainder, Object.fromEntries(autoIds.map((id) => [id, 1])), autoIds.length,
+    )
+    for (const id of autoIds) next[id] = parts[id] ?? 0
+  } else if (remainder > 0 && others.length > 0) {
+    // Los demás se recalculan desde cero: el resto es sólo lo que sobra
+    // después del importe editado, no después de sus valores anteriores.
+    const parts = allocateByWeights(
+      Math.max(0, totalCents - (next[editedId] ?? 0)),
+      Object.fromEntries(others.map((id) => [id, 1])),
+      others.length,
+    )
+    for (const id of others) {
+      next[id] = parts[id] ?? 0
+      nextLocked[id] = false
+    }
+  }
+  return { amounts: next, locked: nextLocked }
+}
+
+/** Reajusta los campos automáticos cuando cambia el total del gasto. */
+export function rebalanceAmounts(
+  amounts: Record<string, number | null>,
+  locked: Record<string, boolean>,
+  totalCents: number,
+): Record<string, number | null> {
+  const ids = Object.keys(amounts)
+  if (ids.length === 0 || totalCents <= 0) return { ...amounts }
+  const sumLocked = ids.reduce(
+    (sum, id) => sum + (locked[id] && amounts[id] != null ? amounts[id]! : 0), 0,
+  )
+  const autoIds = ids.filter((id) => !locked[id] || amounts[id] == null)
+  const next = { ...amounts }
+  if (autoIds.length === 0) return next
+  const parts = allocateByWeights(
+    Math.max(0, totalCents - sumLocked),
+    Object.fromEntries(autoIds.map((id) => [id, 1])),
+    autoIds.length,
+  )
+  for (const id of autoIds) next[id] = parts[id] ?? 0
+  return next
+}
+
 /** Partes enteras no negativas, con al menos una mayor que cero. */
 export type Parts = Record<string, number>
 

@@ -8,8 +8,8 @@ import { ScreenHeader, Logo } from '../components/Shell'
 import { Button, EmptyState, Input, Sheet } from '../components/ui'
 import { CATEGORIES, categoryColor } from '../lib/constants'
 import {
-  allocateCents, equalShares, partsFromShares, sharesFromAmounts, sharesFromParts, sharesFromPercents,
-  type Parts, type Shares,
+  allocateCents, equalShares, partsFromShares, rebalanceAmounts, sharesFromAmounts, sharesFromParts,
+  sharesFromPercents, updateAmountSplit, type Parts, type Shares,
 } from '../lib/balance'
 import { memberIdsOf, memberLabel } from '../lib/members'
 import { rememberedCategory, suggestDescriptions } from '../lib/suggestions'
@@ -52,6 +52,7 @@ export function ExpensesScreen() {
   const [participants, setParticipants] = useState<Record<string, boolean>>({})
   const [splitMode, setSplitMode] = useState<'percent' | 'parts' | 'amounts'>('percent')
   const [amounts, setAmounts] = useState<Record<string, string>>({})
+  const [amountsLocked, setAmountsLocked] = useState<Record<string, boolean>>({})
   const [editingId, setEditingId] = useState<string | null>(null)
   const [recurrence, setRecurrence] = useState<Recurrence>('none')
   const [query, setQuery] = useState('')
@@ -99,6 +100,36 @@ export function ExpensesScreen() {
       : parseAmountToCents(baseAmount) ?? 0
   }
 
+  function amountValues(): Record<string, number | null> {
+    return Object.fromEntries(editorIds.map((id) => {
+      const raw = amounts[id]?.trim() ?? ''
+      return [id, raw ? parseAmountToCents(raw) : null]
+    }))
+  }
+
+  function writeAmountValues(next: Record<string, number | null>) {
+    setAmounts(Object.fromEntries(
+      Object.entries(next).map(([id, cents]) => [id, cents === null ? '' : amountInputFromCents(cents)]),
+    ))
+  }
+
+  function changeAmount(id: string, raw: string) {
+    const cents = raw.trim() ? parseAmountToCents(raw) : null
+    const result = updateAmountSplit(
+      amountValues(), amountsLocked, id, cents, baseTotalCents(),
+    )
+    writeAmountValues(result.amounts)
+    setAmountsLocked(result.locked)
+    setError('')
+  }
+
+  function changeTotal(raw: string) {
+    setAmount(raw)
+    if (splitMode === 'amounts') {
+      writeAmountValues(rebalanceAmounts(amountValues(), amountsLocked, parseAmountToCents(raw) ?? 0))
+    }
+  }
+
   function currentShares(totalCents: number) {
     if (splitMode === 'amounts') {
       const entered: Record<string, number | null> = {}
@@ -117,7 +148,13 @@ export function ExpensesScreen() {
     const next = { ...participants, [id]: participates }
     setParticipants(next)
     if (splitMode === 'amounts') {
-      setAmounts((prev) => (next[id] ? prev : { ...prev, [id]: '' }))
+      if (next[id]) {
+        const result = updateAmountSplit(
+          amountValues(), amountsLocked, id, null, baseTotalCents(),
+        )
+        writeAmountValues(result.amounts)
+        setAmountsLocked(result.locked)
+      }
       setError('')
       return
     }
@@ -132,7 +169,10 @@ export function ExpensesScreen() {
     const shares = currentShares(baseTotalCents()) ?? equalShares(memberIds)
     if (mode === 'parts') setParts(partsFromShares(shares))
     else if (mode === 'percent') setPercents(toPercentInputs(shares))
-    else setAmounts(toAmountInputs(shares, baseTotalCents()))
+    else {
+      setAmounts(toAmountInputs(shares, baseTotalCents()))
+      setAmountsLocked({})
+    }
     setSplitMode(mode)
   }
 
@@ -152,6 +192,7 @@ export function ExpensesScreen() {
     setParticipants(Object.fromEntries(memberIds.map((id) => [id, true])))
     setSplitMode('percent')
     setAmounts({})
+    setAmountsLocked({})
     setRecurrence('none')
   }
 
@@ -170,6 +211,7 @@ export function ExpensesScreen() {
       setPercents(toPercentInputs(expense.shares))
       setParts(partsFromShares(expense.shares))
       setAmounts(toAmountInputs(expense.shares ?? {}, baseAmountOf(expense)))
+      setAmountsLocked({})
       setParticipants(Object.fromEntries(
         editorIds.map((id) => [id, (expense.shares[id] ?? 0) > 0]),
       ))
@@ -396,7 +438,7 @@ export function ExpensesScreen() {
               <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted">Monto</span>
               <Input
                 value={amount}
-                onChange={(event) => setAmount(event.target.value)}
+                onChange={(event) => changeTotal(event.target.value)}
                 placeholder="1250,50"
                 inputMode="decimal"
                 aria-label="Monto"
@@ -421,7 +463,12 @@ export function ExpensesScreen() {
               </span>
               <Input
                 value={baseAmount}
-                onChange={(event) => setBaseAmount(event.target.value)}
+                onChange={(event) => {
+                  setBaseAmount(event.target.value)
+                  if (splitMode === 'amounts') {
+                    writeAmountValues(rebalanceAmounts(amountValues(), amountsLocked, parseAmountToCents(event.target.value) ?? 0))
+                  }
+                }}
                 placeholder="1250,50"
                 inputMode="decimal"
                 aria-label={`Equivalente en ${baseCurrency}`}
@@ -478,7 +525,10 @@ export function ExpensesScreen() {
                 type="button"
                 onClick={() => {
                   const even = equalShares(activeIds)
-                  if (splitMode === 'amounts') setAmounts(toAmountInputs(even, baseTotalCents()))
+                  if (splitMode === 'amounts') {
+                    setAmounts(toAmountInputs(even, baseTotalCents()))
+                    setAmountsLocked({})
+                  }
                   else if (splitMode === 'parts') setParts(partsFromShares(even))
                   else { setPercents(toPercentInputs(even)); setParts(partsFromShares(even)) }
                 }}
@@ -504,7 +554,7 @@ export function ExpensesScreen() {
             </div>
             {splitMode === 'amounts' && (
               <p className="mb-2 text-[10.5px] text-muted">
-                Ingresá el importe que corresponde a cada persona; el resto del gasto se reparte igual entre quienes no pusieron importe.
+                Ingresá el importe de cada persona: los demás campos se ajustan solos para que la suma sea siempre el total.
               </p>
             )}
             <div className="space-y-2">
@@ -525,7 +575,7 @@ export function ExpensesScreen() {
                       <Input
                         disabled={participants[id] === false}
                         value={amounts[id] ?? ''}
-                        onChange={(event) => setAmounts((prev) => ({ ...prev, [id]: event.target.value }))}
+                        onChange={(event) => changeAmount(id, event.target.value)}
                         inputMode="decimal"
                         className="text-right"
                         aria-label={`Importe de ${label(id)}`}

@@ -8,9 +8,11 @@ import {
   monthSummary,
   overallSummary,
   partsFromShares,
+  rebalanceAmounts,
   settle,
   sharesFromAmounts,
   sharesFromParts,
+  updateAmountSplit,
   sharesFromPercents,
   splitByCategory,
   isValidParts,
@@ -122,6 +124,50 @@ describe('reparto por importes', () => {
     const shares = sharesFromAmounts({ ana: 1000, lucas: null }, 10000)!
     const { balances } = computeBalances([gasto(10000, ANA, shares)], [ANA, LUCAS])
     expect(balances).toEqual({ ana: 9000, lucas: -9000 })
+  })
+})
+
+describe('ajuste automático de importes', () => {
+  it('al cambiar uno, el otro toma el resto', () => {
+    const result = updateAmountSplit(
+      { ana: 500, lucas: 500 }, {}, 'ana', 10, 1000,
+    )
+    expect(result.amounts).toEqual({ ana: 10, lucas: 990 })
+  })
+
+  it('reparte el resto entre varios campos automáticos', () => {
+    const result = updateAmountSplit(
+      { ana: 334, lucas: 333, mara: 333 }, {}, 'ana', 10, 1000,
+    )
+    expect(result.amounts).toEqual({ ana: 10, lucas: 495, mara: 495 })
+  })
+
+  it('respeta los importes que el usuario escribió', () => {
+    const result = updateAmountSplit(
+      { ana: 500, lucas: 300, mara: 200 }, { lucas: true }, 'ana', 10, 1000,
+    )
+    expect(result.amounts).toEqual({ ana: 10, lucas: 300, mara: 690 })
+    expect(result.locked).toEqual({ lucas: true, ana: true })
+  })
+
+  it('si todos estaban escritos, el resto se reparte y esos campos se desbloquean', () => {
+    const result = updateAmountSplit(
+      { ana: 10, lucas: 20 }, { ana: true, lucas: true }, 'ana', 10, 1000,
+    )
+    expect(result.amounts).toEqual({ ana: 10, lucas: 990 })
+    expect(result.locked.lucas).toBe(false)
+  })
+
+  it('no deja que la suma supere el total', () => {
+    const result = updateAmountSplit(
+      { ana: 500, lucas: 500 }, { lucas: true }, 'ana', 900, 1000,
+    )
+    expect(result.amounts).toEqual({ ana: 500, lucas: 500 })
+  })
+
+  it('al cambiar el total se reajustan los campos automáticos', () => {
+    expect(rebalanceAmounts({ ana: 10, lucas: 990 }, { ana: true }, 2000))
+      .toEqual({ ana: 10, lucas: 1990 })
   })
 })
 
