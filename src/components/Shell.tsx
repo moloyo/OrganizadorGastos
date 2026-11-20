@@ -42,7 +42,10 @@ export function ScreenHeader({
         </h1>
         {subtitle && <p className="mt-0.5 text-[12px] text-muted">{subtitle}</p>}
       </div>
-      {action}
+      <div className="flex shrink-0 items-center gap-2">
+        <NotificationCenter />
+        {action}
+      </div>
     </header>
   )
 }
@@ -129,7 +132,6 @@ export function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-[560px] flex-col">
       <main className="flex-1 px-4 pb-32 pt-[max(1.25rem,env(safe-area-inset-top))]">
-        <div className="mb-2 flex justify-end"><NotificationCenter /></div>
         <OfflineBanner />
         <TripSwitcher />
         {children}
