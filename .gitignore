@@ -17,5 +17,3 @@ supabase/.temp/
 
 .vercel
 .env*
-
-install-windows.ps1

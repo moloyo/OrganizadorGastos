@@ -99,6 +99,16 @@ Sólo entorno local, sin Supabase real:
 - Adjuntos de ticket.
 - Moneda y configuración por hogar.
 
+## Pendientes acordados (noviembre 2026)
+
+- **Notificaciones con la app cerrada (Web Push).** Hoy el campanito funciona siempre y el aviso del navegador sólo con la pestaña abierta. Para avisar con la app cerrada:
+  1. Generar el par VAPID con `npx web-push generate-vapid-keys`. La clave pública va a Vercel como `VITE_VAPID_PUBLIC_KEY` (se lee en build); la privada va como secreto de la Edge Function de Supabase, **nunca** al frontend.
+  2. Agregar el handler `push` en `public/sw.js` (vite-plugin-pwa ya genera el service worker): `self.addEventListener('push', event => ...)` mostrando `event.notification` con título "Nuevo gasto del hogar" y el cuerpo con descripción y monto.
+  3. Crear la tabla `push_subscriptions (user_id uuid, endpoint text, keys jsonb, created_at timestamptz)` con RLS "sólo el propio usuario", y guardar ahí el resultado de `registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: <clave pública> })`.
+  4. Crear una Edge Function `send-push` que lea las `notifications` nuevas y envíe a las suscripciones de ese `user_id`. Dispararla desde un trigger `pg_net` sobre `notifications` (o con un cron si se prefiere agrupar).
+  5. Reutilizar el permiso que ya se pide en `Ajustes → Notificaciones`: cuando se conceda, suscribir al service worker y persistir la suscripción; si se revoca, borrarla.
+  6. Verificar con las dos cuentas de prueba, con la app cerrada y en HTTPS (Vercel ya lo da). Confirmar que `sw.js` se sirve con `Cache-Control: public, max-age=0, must-revalidate` (ya está en `vercel.json`) para que el service worker nuevo llegue a los dispositivos.
+
 ## Cómo retomar
 
 1. Leé este archivo y [DESARROLLO.md](DESARROLLO.md) (retomar en 5 minutos).
@@ -111,3 +121,4 @@ Sólo entorno local, sin Supabase real:
 ## Bitácora
 
 - `2026-11-16 · Scaffold inicial`
+- `2026-11-20 · Notificaciones de gastos en el hogar + Web Push pendiente`
